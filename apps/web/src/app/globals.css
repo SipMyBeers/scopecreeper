@@ -11,117 +11,83 @@
   --neon-green: #39ff14;
   --neon-magenta: #ff007f;
   --neon-amber: #ffb000;
-  --neon-red: #ff0000;
+  --neon-cyan: #00ffff;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   overflow: hidden;
+  image-rendering: pixelated; /* Essential for the 8-bit look */
 }
 
-/* CRT Main Frame - Thick, Glitching, Magenta/Green */
-.crt-frame-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 500;
-  border: 12px solid #ff007f;
-  box-shadow: inset 0 0 40px rgba(255, 0, 127, 0.5), 0 0 20px rgba(255, 0, 127, 0.3);
-}
-
-.crt-frame-overlay::before {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border: 4px solid #39ff14;
-  opacity: 0.6;
-  animation: border-flicker 0.1s infinite;
-}
-
-@keyframes border-flicker {
-  0% { opacity: 0.4; }
-  50% { opacity: 0.7; }
-  100% { opacity: 0.4; }
-}
-
-/* CRT Screen Tech */
-.crt-screen-content {
+/* CRT Screen Base */
+.crt-screen-base {
+  background: radial-gradient(circle at center, #1a1a3e 0%, #050508 100%);
   position: relative;
   width: 100%;
   height: 100vh;
-  background: radial-gradient(circle at center, #1a1a2e 0%, #050508 100%);
-  overflow: hidden;
 }
 
-.crt-screen-content::after {
-  content: " ";
-  display: block;
-  position: absolute;
+/* scanlines */
+.crt-scanlines {
+  position: fixed;
   inset: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
-              linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+  pointer-events: none;
   z-index: 400;
-  background-size: 100% 3px, 3px 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.3) 50%
+  );
+  background-size: 100% 4px;
+}
+
+/* Glitch Grain */
+.crt-grain {
+  position: fixed;
+  inset: -100px;
+  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+  opacity: 0.08;
+  z-index: 401;
   pointer-events: none;
+  animation: grain-shift 0.2s steps(4) infinite;
 }
 
-/* Typography & Glows */
-.font-press-start {
-  font-family: var(--font-press-start-2p), cursive;
+@keyframes grain-shift {
+  0% { transform: translate(0,0); }
+  25% { transform: translate(10px, 10px); }
+  50% { transform: translate(-10px, 5px); }
+  75% { transform: translate(5px, -10px); }
 }
 
-.text-hallucination-white {
-  color: #ffffff;
-  text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
-  opacity: 0.9;
-}
-
-.glow-amber {
-  color: #ffb000;
-  text-shadow: 0 0 15px #ffb000, 0 0 30px #ffb000;
-}
-
-.glow-magenta {
-  color: #ff007f;
-  text-shadow: 0 0 15px #ff007f, 0 0 30px #ff007f;
-}
-
-.glow-green {
-  color: #39ff14;
-  text-shadow: 0 0 15px #39ff14, 0 0 25px #39ff14;
-}
-
-/* Arcade Cabinet Pixel-Art Style */
-.arcade-body {
-  background: #2a2a4e;
-  border: 4px solid #4a4a7e;
-  box-shadow: 8px 8px 0px #1a1a2e;
-}
-
-.arcade-screen-inset {
-  background: #000;
-  border: 4px solid #1a1a2e;
-  box-shadow: inset 4px 4px 0px #111;
-}
-
-/* Input Box - Direct Match to Image */
-.payload-box {
-  border: 4px solid #39ff14;
-  background: rgba(0,0,0,0.9);
-  box-shadow: 0 0 30px rgba(57, 255, 20, 0.3);
-  position: relative;
-}
-
-.payload-box::after {
-  content: "";
+/* Broken Border Artifacts */
+.glitch-fragment {
   position: absolute;
-  inset: -10px;
-  border: 1px solid rgba(57, 255, 20, 0.2);
-  pointer-events: none;
+  background: var(--neon-magenta);
+  box-shadow: 0 0 10px var(--neon-magenta);
+  z-index: 501;
 }
 
-/* Expandable Sidebar */
-.sidebar-transition {
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.glitch-fragment.green {
+  background: var(--neon-green);
+  box-shadow: 0 0 10px var(--neon-green);
+}
+
+/* Typography Overhaul */
+.header-amber {
+  color: #ffb000;
+  text-shadow: 0 0 8px rgba(255, 176, 0, 0.8), 0 0 15px rgba(255, 176, 0, 0.4);
+  font-family: var(--font-press-start-2p);
+}
+
+.terminal-amber {
+  color: #ffb000;
+  font-family: var(--font-vt323);
+  text-shadow: 0 0 5px rgba(255, 176, 0, 0.5);
+}
+
+.glow-text-white {
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(255,255,255,0.5), 2px 2px 0px rgba(0,0,0,0.8);
 }
