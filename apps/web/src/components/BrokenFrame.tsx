@@ -1,55 +1,114 @@
 "use client";
 
+import React from "react";
+import { PixelSprite } from "./PixelSprite";
 import { motion } from "framer-motion";
+
+const MAGENTA = "#ff007f";
+const GREEN = "#39ff14";
+
+// Manual pixel maps for broken segments
+const CORNER_TL = [
+  "MMMMMMMMMM",
+  "M        ",
+  "M  MMMMMM",
+  "M  M     ",
+  "M  M     ",
+  "M  M     ",
+  "M        ",
+  "M        "
+];
+
+const JAGGED_H = [
+  "MMMM MMM MMMMM",
+  "  MM M   MM   "
+];
+
+const JAGGED_V = [
+  "M ",
+  "M ",
+  "  ",
+  "MM",
+  "M ",
+  "M "
+];
+
+const GREEN_BAR = [
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+  "G                            G",
+  "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+];
 
 export const BrokenFrame = () => {
   return (
     <div className="fixed inset-0 pointer-events-none z-[1100]">
-      {/* 
-        MANUAL JAGGED BORDER BLOCKS
-        Replicating the broken, high-fidelity CRT look from the image.
-      */}
+      {/* Top Left Corner */}
+      <div className="absolute top-8 left-8">
+        <PixelSprite pixels={CORNER_TL} colors={{'M': MAGENTA}} pixelSize={8} />
+      </div>
 
-      {/* Top segments */}
-      <div className="absolute top-4 left-4 w-40 h-8 bg-[#ff007f] shadow-[0_0_20px_#ff007f]" />
-      <div className="absolute top-4 left-60 w-80 h-4 bg-[#ff007f]" />
-      <div className="absolute top-4 right-10 w-60 h-10 bg-[#ff007f]" />
+      {/* Top Row Segments */}
+      <div className="absolute top-8 left-64">
+        <PixelSprite pixels={JAGGED_H} colors={{'M': MAGENTA}} pixelSize={8} />
+      </div>
+      <div className="absolute top-8 right-32">
+        <PixelSprite pixels={JAGGED_H} colors={{'M': MAGENTA}} pixelSize={8} />
+      </div>
 
-      {/* Left segments */}
-      <div className="absolute top-4 left-4 w-8 h-[30%] bg-[#ff007f]" />
-      <div className="absolute top-[40%] left-4 w-6 h-[20%] bg-[#ff007f] opacity-50" />
-      <div className="absolute bottom-4 left-4 w-10 h-[25%] bg-[#39ff14] shadow-[0_0_20px_#39ff14]" />
+      {/* Side Vertical Segments */}
+      <div className="absolute top-64 left-8">
+        <PixelSprite pixels={JAGGED_V} colors={{'M': MAGENTA}} pixelSize={8} />
+      </div>
+      <div className="absolute top-[50%] right-8">
+        <PixelSprite pixels={JAGGED_V} colors={{'M': MAGENTA}} pixelSize={8} />
+      </div>
 
-      {/* Right segments */}
-      <div className="absolute top-4 right-4 w-8 h-[40%] bg-[#ff007f]" />
-      <div className="absolute top-[50%] right-4 w-12 h-20 bg-[#ff007f] shadow-[0_0_15px_#ff007f]" />
-      <div className="absolute bottom-4 right-4 w-8 h-[30%] bg-[#39ff14] shadow-[0_0_20px_#39ff14]" />
-
-      {/* Bottom segment (The long green bar) */}
-      <div className="absolute bottom-4 left-10 right-10 h-4 bg-[#39ff14] shadow-[0_0_30px_#39ff14]" />
-
-      {/* Disconnected Glitch Fragments */}
-      {[...Array(30)].map((_, i) => (
+      {/* Bottom Green Glowing Section */}
+      <div className="absolute bottom-8 left-[10%] right-[10%] flex justify-center">
         <motion.div
-          key={i}
+          animate={{ opacity: [0.4, 0.8, 0.4] }}
+          transition={{ duration: 0.1, repeat: Infinity }}
+          className="w-full flex justify-center"
+        >
+          <PixelSprite pixels={GREEN_BAR} colors={{'G': GREEN}} pixelSize={8} className="w-full" />
+        </motion.div>
+      </div>
+
+      {/* Floating Glitch Fragments (Magenta) */}
+      {[...Array(15)].map((_, i) => (
+        <motion.div
+          key={`m-${i}`}
           initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.8, 0] }}
+          animate={{ opacity: [0, 1, 0] }}
           transition={{ duration: 0.1, repeat: Infinity, delay: Math.random() * 5 }}
-          className={`absolute ${Math.random() > 0.5 ? 'bg-[#ff007f]' : 'bg-[#39ff14]'}`}
+          className="absolute"
           style={{
-            top: `${Math.random() * 100}%`,
-            left: Math.random() > 0.5 ? '2px' : 'auto',
-            right: Math.random() > 0.5 ? 'auto' : '2px',
-            width: `${Math.random() * 20 + 5}px`,
-            height: `${Math.random() * 6 + 2}px`,
-            boxShadow: `0 0 10px ${Math.random() > 0.5 ? '#ff007f' : '#39ff14'}`
+            top: `${Math.random() * 90 + 5}%`,
+            left: Math.random() > 0.5 ? '12px' : 'auto',
+            right: Math.random() > 0.5 ? 'auto' : '12px',
           }}
-        />
+        >
+          <PixelSprite pixels={["MM"]} colors={{'M': MAGENTA}} pixelSize={8} />
+        </motion.div>
       ))}
 
-      {/* Scanline interference lines */}
-      <div className="absolute top-[10%] left-0 w-full h-[1px] bg-white/10" />
-      <div className="absolute top-[80%] left-0 w-full h-[1px] bg-white/10" />
+      {/* Floating Glitch Fragments (Green) */}
+      {[...Array(10)].map((_, i) => (
+        <motion.div
+          key={`g-${i}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 1, 0] }}
+          transition={{ duration: 0.1, repeat: Infinity, delay: Math.random() * 5 }}
+          className="absolute"
+          style={{
+            bottom: `${Math.random() * 40 + 5}%`,
+            left: Math.random() > 0.5 ? '20px' : 'auto',
+            right: Math.random() > 0.5 ? 'auto' : '20px',
+          }}
+        >
+          <PixelSprite pixels={["GG"]} colors={{'G': GREEN}} pixelSize={8} />
+        </motion.div>
+      ))}
     </div>
   );
 };
