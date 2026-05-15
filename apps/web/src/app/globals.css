@@ -11,6 +11,9 @@
   --neon-green: #39ff14;
   --neon-magenta: #ff007f;
   --neon-amber: #ffb000;
+  --neon-cyan: #00ffff;
+  --pixel-purple: #1a1a2e;
+  --pixel-blue: #3a3a6e;
 }
 
 body {
@@ -18,88 +21,91 @@ body {
   color: var(--foreground);
   overflow: hidden;
   image-rendering: pixelated;
+  -webkit-font-smoothing: none;
 }
 
 /* CRT Screen Base */
-.crt-container {
+.crt-outer {
+  position: relative;
   width: 100vw;
   height: 100vh;
-  position: relative;
-  background: radial-gradient(circle at center, #1a1a2e 0%, #050508 100%);
+  background: #050508;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-/* Heavy Static & Scanlines */
-.crt-noise {
-  position: fixed;
-  inset: -10%;
-  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  opacity: 0.05;
-  z-index: 999;
-  pointer-events: none;
-  animation: noise-move 0.2s steps(2) infinite;
-}
-
-@keyframes noise-move {
-  0% { transform: translate(0, 0); }
-  100% { transform: translate(5px, 5px); }
-}
-
-.crt-scanlines {
+/* scanlines - Thick and gritty */
+.scanlines-overlay {
   position: fixed;
   inset: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%);
-  background-size: 100% 4px;
-  z-index: 1000;
   pointer-events: none;
-  opacity: 0.15;
+  z-index: 1000;
+  background: linear-gradient(
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.5) 50%
+  );
+  background-size: 100% 6px;
+  opacity: 0.2;
 }
 
-/* Broken CRT Frame Construction */
-.pixel-border-part {
-  background: var(--neon-magenta);
-  box-shadow: 0 0 15px var(--neon-magenta);
+/* Broken Border Fragment Engine */
+.border-fragment {
   position: absolute;
-  z-index: 500;
+  background: var(--neon-magenta);
+  box-shadow: 0 0 10px var(--neon-magenta);
+  z-index: 1100;
 }
 
-.pixel-border-part.green {
+.border-fragment.green {
   background: var(--neon-green);
-  box-shadow: 0 0 15px var(--neon-green);
+  box-shadow: 0 0 10px var(--neon-green);
 }
 
-/* Typography Matching */
-.font-press-start {
+/* Typography Fidelity */
+.headline-match {
+  color: var(--neon-amber);
+  text-shadow: 0 0 15px var(--neon-amber), 4px 4px 0px #000;
   font-family: var(--font-press-start-2p);
+  line-height: 1.8;
+  letter-spacing: 0.1em;
 }
 
-.text-hallucination-white {
+.hallucination-text {
   color: #ffffff;
   text-shadow: 0 0 10px rgba(255,255,255,0.5), 2px 2px 0px #000;
-  font-weight: 900;
+  font-family: var(--font-vt323);
+  font-style: italic;
+  font-weight: bold;
+  opacity: 0.9;
 }
 
-.glow-amber {
-  color: #ffb000;
-  text-shadow: 0 0 20px #ffb000, 4px 4px 0px #000;
+/* The High-Fidelity Cabinet Frame */
+.pixel-cabinet-hull {
+  background: var(--pixel-blue);
+  border: 6px solid #000;
+  box-shadow: 10px 10px 0px #111;
+  position: relative;
 }
 
-.glow-green {
-  color: #39ff14;
-  text-shadow: 0 0 20px #39ff14;
-}
-
-/* Cabinet Components */
-.cabinet-side {
+.pixel-cabinet-marquee {
   background: #2a2a4e;
-  border: 4px solid #1a1a2e;
+  border-bottom: 6px solid #000;
+  height: 60px;
 }
 
-.cabinet-panel {
-  background: #3a3a6e;
-  border-top: 4px solid #4a4a8e;
+.pixel-cabinet-screen {
+  background: #000;
+  border: 6px solid #111;
+  margin: 10px;
+  position: relative;
+  overflow: hidden;
 }
 
-/* Scrollbar Hide */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* Glowing Core Wires */
+.pixel-wire {
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  filter: drop-shadow(0 0 10px currentColor);
 }
