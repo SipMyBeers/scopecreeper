@@ -6,75 +6,103 @@
 }
 
 :root {
-  --background: #0d0d11;
+  --background: #050508;
   --foreground: #ededed;
+  --neon-green: #39ff14;
+  --neon-magenta: #ff007f;
+  --neon-amber: #ffb000;
+  --neon-red: #ff0000;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
   overflow-x: hidden;
 }
 
-/* CRT Scanline Overlay */
-.crt-overlay::before {
-  content: " ";
-  display: block;
+/* 3D Beveled Metal Frame */
+.beveled-frame {
+  position: relative;
+  background: linear-gradient(135deg, #1a1a1e 0%, #0d0d11 100%);
+  border: 4px solid #2a2a2e;
+  box-shadow: 
+    inset 2px 2px 0px rgba(255, 255, 255, 0.05),
+    inset -2px -2px 0px rgba(0, 0, 0, 0.5),
+    4px 4px 15px rgba(0, 0, 0, 0.8);
+}
+
+.beveled-frame::after {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
-    linear-gradient(
-      90deg,
-      rgba(255, 0, 0, 0.06),
-      rgba(0, 255, 0, 0.02),
-      rgba(0, 0, 255, 0.06)
-    );
-  z-index: 50;
-  background-size: 100% 2px, 3px 100%;
+  inset: -6px;
+  border: 1px solid #3a3a3e;
   pointer-events: none;
+  z-index: -1;
+}
+
+/* Backlit Neon Groove */
+.neon-groove {
+  border: 2px solid #000;
+  box-shadow: 0 0 5px var(--neon-magenta), inset 0 0 5px var(--neon-magenta);
+  background: #0a0a0e;
+}
+
+/* CRT Glass Texture & Curvature */
+.crt-glass {
+  background: radial-gradient(circle at center, rgba(18, 16, 16, 0) 0%, rgba(0, 0, 0, 0.1) 100%);
+  box-shadow: inset 0 0 100px rgba(0,0,0,0.5);
+}
+
+.crt-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+              linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+  background-size: 100% 3px, 3px 100%;
+  z-index: 100;
+}
+
+/* Flickering Static */
+@keyframes static-flicker {
+  0% { opacity: 0.01; }
+  5% { opacity: 0.03; }
+  10% { opacity: 0.01; }
+  15% { opacity: 0.04; }
+  20% { opacity: 0.01; }
+  100% { opacity: 0.02; }
 }
 
 .crt-scanline {
-  width: 100%;
-  height: 100px;
-  z-index: 51;
   background: linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(255, 255, 255, 0.2) 10%,
-    rgba(0, 0, 0, 0) 100%
+    to bottom,
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.2) 50%
   );
-  opacity: 0.1;
-  position: absolute;
-  bottom: 100%;
-  animation: scanline 8s linear infinite;
-  pointer-events: none;
+  background-size: 100% 4px;
+  animation: static-flicker 0.15s infinite;
 }
 
-@keyframes scanline {
-  0% {
-    bottom: 100%;
-  }
-  80% {
-    bottom: 100%;
-  }
-  100% {
-    bottom: -100px;
-  }
+/* Neon Text Glows */
+.magenta-glow {
+  color: var(--neon-magenta);
+  text-shadow: 0 0 8px var(--neon-magenta), 0 0 12px var(--neon-magenta);
 }
 
-.pixel-border {
+.amber-glow {
+  color: var(--neon-amber);
+  text-shadow: 0 0 5px var(--neon-amber);
+}
+
+.green-glow {
+  color: var(--neon-green);
+  text-shadow: 0 0 5px var(--neon-green);
+}
+
+/* Pixel Border Utility */
+.pixel-border-arcade {
   border: 4px solid;
   border-image-slice: 2;
   border-image-width: 2;
-  border-image-outset: 0;
-  border-image-source: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='6' height='6'><path d='M0 2h2v2H0zM2 0h2v2H2zM4 2h2v2H4zM2 4h2v2H2z' fill='%2339FF14'/></svg>");
-}
-
-.glitch-text {
-  text-shadow: 2px 0 #ff00ff, -2px 0 #00ffff;
+  border-image-source: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='6' height='6'><path d='M0 2h2v2H0zM2 0h2v2H2zM4 2h2v2H4zM2 4h2v2H2z' fill='rgba(255,255,255,0.1)'/></svg>");
 }
