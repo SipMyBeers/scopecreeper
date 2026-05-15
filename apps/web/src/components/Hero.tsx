@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Terminal, Globe, FileText, GitBranch } from "lucide-react";
 import { useState } from "react";
 import ProjectSidebar from "./ProjectSidebar";
+import { PixelArcade } from "./PixelArcade";
 
 const HALLUCINATIONS = [
   { text: "/imagine: create world peace (locally hosted)", angle: -15, top: '15%', left: '5%' },
@@ -55,67 +56,9 @@ export default function Hero() {
           </h1>
         </motion.div>
 
-        {/* The Central Arcade Composition */}
-        <div className="relative w-80 h-96 mb-20 scale-110 lg:scale-[1.3]">
-          
-          {/* Multi-Colored Digital Tentacles (Thick, High-Contrast) */}
-          <div className="absolute top-1/2 left-1/2 w-[240%] h-[240%] -translate-x-1/2 -translate-y-1/2 pointer-events-none overflow-visible">
-            {[
-              { color: '#39FF14', d: 'M 400 400 Q 550 350 650 450' }, // Green
-              { color: '#FF007F', d: 'M 400 400 Q 580 480 680 380' }, // Magenta
-              { color: '#FFB000', d: 'M 400 400 Q 520 550 620 500' }, // Amber
-              { color: '#4D4DFF', d: 'M 400 400 Q 250 480 150 420' }, // Blue
-              { color: '#00FFFF', d: 'M 400 400 Q 600 280 750 350' }, // Cyan
-            ].map((wire, i) => (
-              <svg key={i} className="absolute inset-0 w-full h-full overflow-visible">
-                <motion.path
-                  d={wire.d}
-                  stroke={wire.color}
-                  strokeWidth="12"
-                  fill="transparent"
-                  strokeLinecap="round"
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: [0.4, 0.8, 0.4] }}
-                  transition={{ duration: 3, repeat: Infinity, delay: i * 0.2 }}
-                  className="blur-[1px]"
-                />
-                <motion.path
-                  d={wire.d}
-                  stroke="white"
-                  strokeWidth="3"
-                  fill="transparent"
-                  strokeLinecap="round"
-                  className="opacity-40"
-                />
-              </svg>
-            ))}
-          </div>
-
-          {/* The High-Fidelity 8-bit Cabinet */}
-          <motion.div
-            animate={{ y: [0, -10, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="w-full h-full arcade-body relative overflow-hidden flex flex-col"
-          >
-            {/* Screen with Vortex swirl */}
-            <div className="flex-1 m-4 arcade-screen-inset overflow-hidden flex items-center justify-center relative">
-               <motion.div
-                 animate={{ rotate: 360, scale: [1, 1.1, 1] }}
-                 transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                 className="w-[200%] h-[200%] bg-[conic-gradient(from_0deg,#FF007F,#000,#39FF14,#000,#FF007F)] opacity-70 blur-3xl"
-               />
-               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/lined-paper.png')] opacity-20" />
-            </div>
-            
-            {/* Control Panel (Red/Blue Buttons) */}
-            <div className="h-14 bg-[#3a3a6e] border-t-4 border-black/40 px-6 flex items-center justify-between">
-              <div className="flex gap-2">
-                <div className="w-4 h-4 bg-red-600 shadow-[0_0_10px_rgba(255,0,0,0.8)]" />
-                <div className="w-4 h-4 bg-blue-600 shadow-[0_0_10px_rgba(0,0,0,0.8)]" />
-              </div>
-              <div className="w-8 h-8 rounded-full bg-black/40 border-2 border-white/5" />
-            </div>
-          </motion.div>
+        {/* The Authentic Pixel-Art Arcade Composition */}
+        <div className="relative mb-20">
+          <PixelArcade />
         </div>
 
         {/* The Drop Your Payload Input (Exact Match) */}
