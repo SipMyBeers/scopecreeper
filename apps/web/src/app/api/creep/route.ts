@@ -218,9 +218,13 @@ function normalizeDimension(d: unknown): CreepDimension | null {
   const id =
     String(obj.id ?? "").trim() ||
     label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const creepRaw = Number(obj.creep);
   return {
     id: id.slice(0, 32),
     label: label.toUpperCase().slice(0, 32),
     blurb: String(obj.blurb ?? "").trim().slice(0, 140),
+    creep: Number.isFinite(creepRaw)
+      ? Math.max(0, Math.min(100, Math.round(creepRaw)))
+      : undefined,
   };
 }

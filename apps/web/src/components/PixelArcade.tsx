@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import type { RatingTier } from "@/core";
 import type { ScanState } from "@/hooks/useScanHistory";
-import CableActivity from "./CableActivity";
 
 /** Y-float intensity by state. */
 const FLOAT_BY_STATE: Record<ScanState, number[]> = {
@@ -126,7 +125,6 @@ export function PixelArcade({
         </div>
       )}
 
-      <CableActivity state={state} />
     </motion.div>
   );
 }

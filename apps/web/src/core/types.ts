@@ -26,6 +26,9 @@ export interface CreepDimension {
   label: string;
   /** One-line description shown under the label. */
   blurb: string;
+  /** Predicted delusion if the user picks this branch (0-100).
+   *  Drives vertical placement in the skill-tree view. */
+  creep?: number;
 }
 
 /**
