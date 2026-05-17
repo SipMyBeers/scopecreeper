@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Bake a swirl animation INTO an arcade sprite — every pixel inside the
-CRT screen rectangle is procedurally regenerated per frame so the
-entire rect moves. Cabinet, cables, bezel stay pixel-identical.
+"""Bake a swirl animation INTO an arcade sprite by rotating the
+ORIGINAL screen interior pixels per frame.
 
-The swirl is a polar conic gradient sampled from the tier's dominant
-colors (auto-detected from the source). Pixel (x,y) → color =
-palette[ ((θ × ARMS + r × SWIRL_AMOUNT + frame_phase) mod 1) × palette_size ]
-where (r, θ) are normalized polar coords relative to the screen-rect
-center.
+Every pixel inside the screen rect moves because we crop a region
+LARGER than the screen rect (overscan), rotate that, then center-crop
+back. The corners of the destination rect get pixels from outside the
+rect — which include some bezel/cabinet pixels that rotate into the
+screen and read as "screen infection" without leaving holes.
+
+Cabinet, cables, and bezel pixels OUTSIDE the screen rect stay
+pixel-identical between frames.
 
 Output: horizontal sprite sheet (W*frames × H) + JSON metadata.
 
@@ -18,24 +20,21 @@ Usage:
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
 from PIL import Image
-import numpy as np
 
-# Screen-interior rectangle in the 580x440 arcade asset. Tight to the
-# dark interior so we never overwrite cabinet/bezel pixels.
+
+# Screen interior rect (where the actual swirl pixels live) in the
+# 580x440 arcade asset. Measured from the magenta swirl blob bbox.
 SCREEN = {
     "left":   0.300,
     "top":    0.290,
     "width":  0.195,
     "height": 0.205,
 }
-
-ARMS = 3.5            # how many spiral arms
-SWIRL_AMOUNT = 1.4    # higher = tighter spiral
-PALETTE_REPEAT = 1    # how many times palette repeats around the disk
 
 
 def _screen_rect(w: int, h: int) -> tuple[int, int, int, int]:
@@ -46,82 +45,48 @@ def _screen_rect(w: int, h: int) -> tuple[int, int, int, int]:
     return x, y, width, height
 
 
-def _sample_palette(base: Image.Image, rect: tuple[int, int, int, int]) -> np.ndarray:
-    """Pull a 6-stop palette from the existing swirl pixels inside the
-    rect so the procedural swirl colors match the tier."""
-    x, y, w, h = rect
-    crop = np.array(base.convert("RGBA").crop((x, y, x + w, y + h)))
-    rgb = crop[..., :3]
-    # Sort by hue-band and pick representative bright pixels.
-    r, g, b = rgb[..., 0].astype(int), rgb[..., 1].astype(int), rgb[..., 2].astype(int)
-    sat = np.maximum.reduce([np.abs(r - g), np.abs(g - b), np.abs(b - r)])
-    bright = sat > 50
-    if not bright.any():
-        # Fall back to a generic neon palette.
-        return np.array(
-            [[20, 5, 30], [255, 0, 127], [40, 10, 60], [0, 255, 255],
-             [20, 5, 30], [57, 255, 20]],
-            dtype=np.uint8,
-        )
-    pix = rgb[bright]
-    # k=6 mini-kmeans without sklearn: bucket by hue then average.
-    hue = np.arctan2(g[bright].astype(float) - b[bright], r[bright].astype(float) - g[bright])
-    hue = (hue + np.pi) / (2 * np.pi)  # [0,1)
-    bins = np.linspace(0, 1, 7)
-    palette = []
-    for i in range(6):
-        m = (hue >= bins[i]) & (hue < bins[i + 1])
-        if m.any():
-            palette.append(pix[m].mean(axis=0).astype(np.uint8))
-        else:
-            palette.append(np.array([20, 5, 30], dtype=np.uint8))
-    # Inject a dark band between bright bands so the spiral reads.
-    out = []
-    for i, c in enumerate(palette):
-        out.append(c)
-        if i % 2 == 0:
-            out.append(np.array([15, 4, 28], dtype=np.uint8))
-    return np.array(out, dtype=np.uint8)
+def _rotate_frame(base: Image.Image, angle: float) -> Image.Image:
+    """Return a copy of base with the screen rect's interior rotated by
+    `angle` degrees. Uses an overscan crop so the rotation never leaves
+    empty corners — every pixel in the destination rect is filled."""
+    w, h = base.size
+    sx, sy, sw, sh = _screen_rect(w, h)
 
+    # Overscan side = ceil(sqrt(w²+h²)) — the rotation diagonal. A crop
+    # this size, when rotated by any angle, still fully covers the
+    # destination sw × sh rect.
+    diag = int(math.ceil(math.sqrt(sw * sw + sh * sh))) + 2
+    half = diag // 2
+    cx = sx + sw // 2
+    cy = sy + sh // 2
 
-def _swirl_frame(w: int, h: int, phase: float, palette: np.ndarray) -> np.ndarray:
-    """Render one swirl frame at the given phase ∈ [0, 1). Returns RGBA."""
-    yy, xx = np.indices((h, w), dtype=np.float32)
-    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
-    dx = (xx - cx) / max(cx, cy)
-    dy = (yy - cy) / max(cx, cy)
-    r = np.sqrt(dx * dx + dy * dy)
-    theta = np.arctan2(dy, dx) / (2 * np.pi) + 0.5  # [0,1)
+    # Clamp the overscan crop to the image bounds.
+    ox0 = max(0, cx - half)
+    oy0 = max(0, cy - half)
+    ox1 = min(w, cx + half)
+    oy1 = min(h, cy + half)
+    overscan = base.crop((ox0, oy0, ox1, oy1))
 
-    # Conic + spiral coordinate.
-    u = (theta * ARMS + r * SWIRL_AMOUNT + phase) * PALETTE_REPEAT
-    u = (u - np.floor(u))  # wrap to [0,1)
-    idx = np.clip((u * len(palette)).astype(int), 0, len(palette) - 1)
-    rgb = palette[idx]  # (h, w, 3)
+    # Rotate the overscan in place (keep its size).
+    rotated = overscan.rotate(angle, resample=Image.NEAREST, expand=False)
 
-    # Darken the edges so it looks like a CRT vignette.
-    vign = np.clip(1.0 - np.power(r, 3.5), 0.15, 1.0)[..., None]
-    rgb = (rgb.astype(np.float32) * vign).astype(np.uint8)
+    # Crop the screen-sized window from the center of the rotated overscan.
+    rcx = rotated.size[0] // 2
+    rcy = rotated.size[1] // 2
+    interior = rotated.crop(
+        (rcx - sw // 2, rcy - sh // 2,
+         rcx - sw // 2 + sw, rcy - sh // 2 + sh)
+    )
 
-    out = np.zeros((h, w, 4), dtype=np.uint8)
-    out[..., :3] = rgb
-    out[..., 3] = 255
+    out = base.copy()
+    out.paste(interior, (sx, sy))
     return out
 
 
 def make_frames(base: Image.Image, frames: int) -> list[Image.Image]:
     base_rgba = base.convert("RGBA")
-    w, h = base_rgba.size
-    sx, sy, sw, sh = _screen_rect(w, h)
-    palette = _sample_palette(base_rgba, (sx, sy, sw, sh))
-    out_frames: list[Image.Image] = []
-    for i in range(frames):
-        frame = base_rgba.copy()
-        swirl_arr = _swirl_frame(sw, sh, i / frames, palette)
-        swirl_img = Image.fromarray(swirl_arr, mode="RGBA")
-        frame.paste(swirl_img, (sx, sy))  # opaque paste — fills full rect
-        out_frames.append(frame)
-    return out_frames
+    step = 360.0 / max(1, frames)
+    return [_rotate_frame(base_rgba, i * step) for i in range(frames)]
 
 
 def write_sprite_sheet(frames: list[Image.Image], sheet_path: Path) -> dict:
@@ -153,10 +118,8 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     base = Image.open(inp)
     meta = write_sprite_sheet(make_frames(base, frames), out)
-    json_path = out.with_suffix(".json")
-    json_path.write_text(json.dumps(meta, indent=2))
-    print(f"wrote {out} + {json_path}")
-    print(json.dumps(meta, indent=2))
+    out.with_suffix(".json").write_text(json.dumps(meta, indent=2))
+    print(f"wrote {out} + {out.with_suffix('.json')}")
     return 0
 
 
