@@ -192,7 +192,8 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const cacheKey = `scan:${await sha256(
+  // v2 suffix → bust cache after the prompt rewrite (now generative project paths).
+  const cacheKey = `scan-v2:${await sha256(
     `${body.kind}::${body.payload}::${body.illusion ?? ""}`
   )}`;
 
