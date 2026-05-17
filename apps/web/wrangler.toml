@@ -1,0 +1,21 @@
+name = "scopecreeper"
+compatibility_date = "2025-05-15"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+# Workers AI — free tier on Pages, used by /api/score for verdicts + mutations.
+[ai]
+binding = "AI"
+
+# KV namespaces.
+[[kv_namespaces]]
+binding = "KV_QUOTAS"
+id = "b1ca6972a2ca49ffbb4e1e633c480372"
+
+[[kv_namespaces]]
+binding = "KV_SCAN_CACHE"
+id = "826ba205383d4279a9602575eba2bd8f"
+
+# Optional vars (non-secret). Secrets go through `wrangler pages secret put`.
+[vars]
+# OLLAMA_MODEL = "gemma3:12b"

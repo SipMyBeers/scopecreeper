@@ -21,7 +21,8 @@ const pressStart2P = Press_Start_2P({
 
 export const metadata: Metadata = {
   title: "Scope Creeper | Tactical Diagnostic Engine",
-  description: "AI Hallucinates Flaws. You Hallucinate Features. Let's find out who has the better delusion.",
+  description:
+    "AI Hallucinates Flaws. You Hallucinate Features. Let's find out who has the better delusion.",
 };
 
 export default function RootLayout({
@@ -30,17 +31,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${vt323.variable} ${jetbrainsMono.variable} ${pressStart2P.variable}`}>
-      <body className="bg-[#050508] text-white antialiased selection:bg-tactical-green selection:text-black">
-        <div className="crt-container relative min-h-screen overflow-hidden">
-          {/* CRT Screen Curvature Effect */}
-          <div className="crt-glass pointer-events-none fixed inset-0 z-[100]" />
-          <div className="crt-scanline pointer-events-none fixed inset-0 z-[101]" />
-          <div className="relative z-10 h-full">
-            {children}
-          </div>
-        </div>
-      </body>
+    <html
+      lang="en"
+      className={`${vt323.variable} ${jetbrainsMono.variable} ${pressStart2P.variable}`}
+    >
+      <body className="bg-black text-white antialiased">{children}</body>
     </html>
   );
 }

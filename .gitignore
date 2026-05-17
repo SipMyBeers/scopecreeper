@@ -1,2 +1,23 @@
-node_modules\n.next\n.env\n.DS_Store\ndist
+# Node / Next
 node_modules
+.next
+.vercel
+out
+dist
+
+# Cloudflare / Wrangler local artifacts
+.wrangler
+.dev.vars
+*.dev.vars
+
+# Env files — never commit secrets. Whitelist .env.example only.
+.env
+.env.*
+!.env.example
+
+# Local notes / scratchpads
+*.local
+TODO.local.md
+
+# OS junk
+.DS_Store

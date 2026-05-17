@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Database from 'better-sqlite3';
-import { DelusionMeter, DiagnosticResult } from './index.js';
+import { DelusionMeter } from './scoring.js';
+import type { DiagnosticResult } from './types.js';
 
 export interface RepoStats {
   stars: number;

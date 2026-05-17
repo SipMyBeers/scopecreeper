@@ -1,15 +1,25 @@
 {
-  "name": "core",
+  "name": "@scopecreeper/core",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./index.ts"
+    },
+    "./ingestion": {
+      "types": "./dist/ingestion.d.ts",
+      "import": "./dist/ingestion.js",
+      "default": "./ingestion.ts"
+    }
+  },
+  "main": "./index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
   "dependencies": {
     "axios": "^1.16.1",
     "better-sqlite3": "^12.10.0"
@@ -17,7 +27,6 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.19.41",
-    "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
 }

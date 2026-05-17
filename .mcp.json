@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "libresprite": {
+      "command": "node",
+      "args": ["./tools/libresprite-mcp/dist/server.js"],
+      "env": {
+        "PYTHON": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3",
+        "LIBRESPRITE": "/Applications/LibreSprite.app/Contents/MacOS/LibreSprite"
+      }
+    }
+  }
+}

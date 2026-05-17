@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Scope Creeper :: Sprite Atlas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #050308;
+      --panel: rgba(8,5,14,0.85);
+      --green: #39ff14;
+      --magenta: #ff007f;
+      --cyan: #00ffff;
+      --amber: #ffb000;
+      --grid: rgba(57,255,20,0.10);
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--green);
+      font-family: "VT323", monospace;
+      min-height: 100vh;
+      image-rendering: pixelated;
+    }
+    body {
+      background:
+        radial-gradient(ellipse at center, rgba(57,255,20,0.05), transparent 60%),
+        linear-gradient(180deg, #050308, #08060f 50%, #050308),
+        var(--bg);
+    }
+    header {
+      padding: 32px 24px 8px;
+      border-bottom: 1px solid rgba(57,255,20,0.25);
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    header h1 {
+      font-family: "Press Start 2P", monospace;
+      font-size: 18px;
+      letter-spacing: 0.2em;
+      margin: 0 0 8px;
+      text-shadow: 0 0 8px var(--green);
+    }
+    header p {
+      font-size: 18px;
+      margin: 0;
+      opacity: 0.75;
+      max-width: 720px;
+    }
+    header .meta {
+      margin-top: 12px;
+      font-size: 13px;
+      opacity: 0.55;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    section {
+      border: 1px solid rgba(57,255,20,0.18);
+      background: var(--panel);
+      backdrop-filter: blur(2px);
+      padding: 20px 20px 16px;
+    }
+    section > h2 {
+      font-family: "Press Start 2P", monospace;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      margin: 0 0 4px;
+      text-shadow: 0 0 6px var(--green);
+    }
+    section > .blurb {
+      font-size: 16px;
+      opacity: 0.7;
+      margin: 0 0 16px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+    .card {
+      border: 1px solid rgba(57,255,20,0.15);
+      background: #000;
+      display: flex;
+      flex-direction: column;
+    }
+    .card .imgwrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      min-height: 180px;
+      background-color: #050308;
+      background-image:
+        linear-gradient(45deg, #0a0a14 25%, transparent 25%),
+        linear-gradient(-45deg, #0a0a14 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #0a0a14 75%),
+        linear-gradient(-45deg, transparent 75%, #0a0a14 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      border-bottom: 1px solid rgba(57,255,20,0.1);
+    }
+    .card img {
+      max-width: 100%;
+      max-height: 320px;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 0 6px rgba(57,255,20,0.25));
+    }
+    .card .meta {
+      padding: 10px 12px;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .card .name {
+      font-family: "Press Start 2P", monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--green);
+      text-shadow: 0 0 4px var(--green);
+    }
+    .card .path {
+      font-size: 13px;
+      opacity: 0.55;
+      word-break: break-all;
+    }
+    .card .dims {
+      font-size: 13px;
+      opacity: 0.8;
+      color: var(--cyan);
+    }
+    .card .usage {
+      font-size: 14px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
+
+    /* Hero composite — show all the bg-image-style assets stacked together at scale */
+    .composite {
+      position: relative;
+      width: 100%;
+      max-width: 1408px;
+      aspect-ratio: 1408 / 768;
+      margin: 0 auto;
+      background: #050308;
+      overflow: hidden;
+      border: 1px solid rgba(255,0,127,0.4);
+      box-shadow: 0 0 24px rgba(255,0,127,0.2), inset 0 0 12px rgba(57,255,20,0.15);
+    }
+    .composite img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
+      image-rendering: pixelated;
+    }
+
+    /* The animated sprite-sheet cards use a clipped strip + steps() */
+    .anim {
+      width: 290px;
+      height: 220px;
+      background-image: url("/assets/arcade/arcade-animated.png");
+      background-repeat: no-repeat;
+      background-size: 600% 100%;  /* 6 frames */
+      animation: arcade-anim 0.72s steps(6) infinite;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 0 8px rgba(255,0,127,0.4));
+    }
+    @keyframes arcade-anim {
+      from { background-position-x: 0%; }
+      to   { background-position-x: 100%; }
+    }
+    /* Swirl-baked tier animations — 8 frames, screen-only rotation. */
+    .swirl-anim {
+      width: 100%;
+      aspect-ratio: 580 / 440;
+      background-repeat: no-repeat;
+      background-size: 800% 100%;  /* 8 frames horizontal */
+      animation: arcade-swirl 1.6s steps(8) infinite;
+      image-rendering: pixelated;
+    }
+    .swirl-anim.corpse    { background-image: url("/assets/arcade/arcade-corpse-anim.png");    filter: drop-shadow(0 0 6px #888); }
+    .swirl-anim.sweetspot { background-image: url("/assets/arcade/arcade-sweetspot-anim.png"); filter: drop-shadow(0 0 8px #39ff14); }
+    .swirl-anim.abyss     { background-image: url("/assets/arcade/arcade-abyss-anim.png");     filter: drop-shadow(0 0 8px #ffb000); }
+    .swirl-anim.delusion  { background-image: url("/assets/arcade/arcade-delusion-anim.png");  filter: drop-shadow(0 0 8px #ff007f); }
+    /* For N frames in a horizontal sprite sheet with `background-size: N×100%`,
+       the snap positions of `steps(N)` only land on real frame boundaries
+       if the animation endpoint is `100% × N/(N-1)`. For N=8 that's 114.286%.
+       If we animate to 100% instead, the steps fall *between* frames and
+       the cabinet looks like it's sliding. */
+    @keyframes arcade-swirl {
+      from { background-position-x: 0%; }
+      to   { background-position-x: 114.2857%; }
+    }
+
+    /* Big featured anim — single hero panel before the 4-up grid. */
+    .swirl-anim-hero {
+      width: 100%;
+      max-width: 560px;
+      aspect-ratio: 580 / 440;
+      background-repeat: no-repeat;
+      background-size: 800% 100%;
+      animation: arcade-swirl 1.6s steps(8) infinite;
+      image-rendering: pixelated;
+      margin: 0 auto;
+      filter: drop-shadow(0 0 18px rgba(57,255,20,0.6));
+      background-image: url("/assets/arcade/arcade-sweetspot-anim.png");
+    }
+    .speed-controls {
+      display: flex; gap: 8px; justify-content: center; margin-top: 12px;
+      font-size: 14px; flex-wrap: wrap;
+    }
+    .speed-controls button {
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(57,255,20,0.4);
+      color: var(--green);
+      padding: 4px 10px;
+      font-family: "VT323", monospace;
+      font-size: 14px;
+      letter-spacing: 0.15em;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .speed-controls button:hover, .speed-controls button.active {
+      border-color: var(--green); background: rgba(57,255,20,0.1);
+      box-shadow: 0 0 8px rgba(57,255,20,0.5);
+    }
+
+    .palette-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    .palette-row .card .imgwrap {
+      min-height: 220px;
+    }
+    .palette-name {
+      text-transform: uppercase;
+      font-family: "Press Start 2P", monospace;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      margin-top: 4px;
+    }
+    .palette-tier-corpse    { color: #888; text-shadow: 0 0 4px #aaa; }
+    .palette-tier-sweetspot { color: var(--green); text-shadow: 0 0 4px var(--green); }
+    .palette-tier-abyss     { color: var(--amber); text-shadow: 0 0 4px var(--amber); }
+    .palette-tier-delusion  { color: var(--magenta); text-shadow: 0 0 4px var(--magenta); }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      opacity: 0.7;
+      margin-top: 12px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend span::before {
+      content: "";
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    }
+    .legend .l-green::before    { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .legend .l-magenta::before  { background: var(--magenta); box-shadow: 0 0 4px var(--magenta); }
+    .legend .l-cyan::before     { background: var(--cyan); box-shadow: 0 0 4px var(--cyan); }
+    .legend .l-amber::before    { background: var(--amber); box-shadow: 0 0 4px var(--amber); }
+
+    footer {
+      padding: 24px;
+      font-size: 13px;
+      opacity: 0.5;
+      text-align: center;
+      letter-spacing: 0.1em;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>SCOPE CREEPER :: SPRITE ATLAS</h1>
+    <p>Every PNG asset generated for the diagnostic engine. Use this as the source-of-truth when wiring sprites into the React app (each card lists the file path + how it's used).</p>
+    <div class="meta">21 files · last updated 2026-05-16</div>
+  </header>
+
+  <main>
+
+    <!-- ── PRIMARY HERO COMPOSITE ─────────────────────────────────────── -->
+    <section>
+      <h2>0 · PRIMARY HERO IMAGE</h2>
+      <p class="blurb">The Gemini-generated source (1408×768) that everything else is decomposed from. Two variants: the canonical render and a copy with the arcade region painted out.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/scopecreeper-hero.png" alt="scopecreeper-hero.png" /></div>
+          <div class="meta">
+            <span class="name">SCOPECREEPER-HERO</span>
+            <span class="dims">1408 × 768 · RGB</span>
+            <span class="path">/public/scopecreeper-hero.png</span>
+            <span class="usage">Canonical source. Not directly used by the live app — kept as the master for re-extraction.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/scopecreeper-hero-bg.png" alt="scopecreeper-hero-bg.png" /></div>
+          <div class="meta">
+            <span class="name">SCOPECREEPER-HERO-BG</span>
+            <span class="dims">1408 × 768 · RGB</span>
+            <span class="path">/public/scopecreeper-hero-bg.png</span>
+            <span class="usage">Hero with the arcade region painted black. Was the v0 background before the layered approach; not currently used.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── LAYERED COMPOSITE PREVIEW ──────────────────────────────────── -->
+    <section>
+      <h2>1 · LAYERED COMPOSITE (live rendering order)</h2>
+      <p class="blurb">All sprites layered exactly as Hero.tsx stacks them. Top-down z-order: background → code fragments → arcade → prompts → headline (×3 chromatic) → terminal → bezel.</p>
+      <div class="composite">
+        <img src="/assets/background.png" alt="" />
+        <img src="/assets/code.png" alt="" />
+        <img src="/arcade-machine.png" alt="" style="left:32.67%; top:18.88%; width:41.19%; height:57.29%;" />
+        <img src="/assets/prompts.png" alt="" />
+        <img src="/assets/headline.png" alt="" />
+        <img src="/assets/terminal.png" alt="" style="left:35.44%; top:77.47%; width:36.01%; height:15.49%;" />
+        <img src="/assets/bezel.png" alt="" />
+      </div>
+      <div class="legend">
+        <span class="l-magenta">bezel = magenta + green</span>
+        <span class="l-amber">headline = amber</span>
+        <span class="l-cyan">code = cyan blueprints</span>
+        <span class="l-green">terminal = green outline</span>
+      </div>
+    </section>
+
+    <!-- ── BACKGROUND ─────────────────────────────────────────────────── -->
+    <section>
+      <h2>2 · BACKGROUND</h2>
+      <p class="blurb">Dark glitch field — everything else (bezel/headline/prompts/code/terminal) is masked out so this is the bottom-most layer.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/background.png" alt="background.png" /></div>
+          <div class="meta">
+            <span class="name">BACKGROUND</span>
+            <span class="dims">1408 × 768 · RGBA</span>
+            <span class="path">/public/assets/background.png</span>
+            <span class="usage">Bottom layer in Hero.tsx (z = base). `Hero.tsx`'s &lt;img src="/assets/background.png"&gt;.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── BEZEL ─────────────────────────────────────────────────────── -->
+    <section>
+      <h2>3 · BEZEL (corroding pixels)</h2>
+      <p class="blurb">Outer neon ring (magenta + green). At runtime this PNG is loaded into a &lt;canvas&gt; (CorrodingBezel.tsx) and individual pixels mutate each frame: 45% kill / 30% infect / 25% restore.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/bezel.png" alt="bezel.png" /></div>
+          <div class="meta">
+            <span class="name">BEZEL</span>
+            <span class="dims">1408 × 768 · RGBA</span>
+            <span class="path">/public/assets/bezel.png</span>
+            <span class="usage">Loaded by `CorrodingBezel.tsx`. Rendered at the very top (z = 20).</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── HEADLINE ──────────────────────────────────────────────────── -->
+    <section>
+      <h2>4 · HEADLINE</h2>
+      <p class="blurb">Amber headline text. Rendered 3× in Hero.tsx with hue-rotated copies for a chromatic ghost shake.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/headline.png" alt="headline.png" /></div>
+          <div class="meta">
+            <span class="name">HEADLINE</span>
+            <span class="dims">1408 × 768 · RGBA</span>
+            <span class="path">/public/assets/headline.png</span>
+            <span class="usage">Three stacked &lt;img&gt;s in Hero.tsx: base, hue-rotate(-90deg), hue-rotate(180deg).</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CODE FRAGMENTS ────────────────────────────────────────────── -->
+    <section>
+      <h2>5 · CODE FRAGMENTS</h2>
+      <p class="blurb">Red + cyan debug widgets sprinkled across the scene. Animated via `fx-flicker` keyframe.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/code.png" alt="code.png" /></div>
+          <div class="meta">
+            <span class="name">CODE</span>
+            <span class="dims">1408 × 768 · RGBA</span>
+            <span class="path">/public/assets/code.png</span>
+            <span class="usage">Hero.tsx `&lt;img&gt;` with `animation: fx-flicker 3.6s steps(1) infinite`.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TERMINAL ──────────────────────────────────────────────────── -->
+    <section>
+      <h2>6 · TERMINAL BOX</h2>
+      <p class="blurb">DROP YOUR PAYLOAD bordered box with C:\_ prompt and GitHub / WWW / file icons. Tightly cropped (507×119).</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/terminal.png" alt="terminal.png" /></div>
+          <div class="meta">
+            <span class="name">TERMINAL</span>
+            <span class="dims">507 × 119 · RGBA</span>
+            <span class="path">/public/assets/terminal.png</span>
+            <span class="usage">Hero.tsx positions at left=35.44%, top=77.47%, w=36.01%, h=15.49%. Has its own pulse glow animation.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── DIAMOND ──────────────────────────────────────────────────── -->
+    <section>
+      <h2>7 · DIAMOND (currently unused)</h2>
+      <p class="blurb">Bottom-right gemini-style sparkle. Was rendered with a pulse animation; currently NOT in Hero.tsx because the crop also captured bezel-corner fragments. Available if we re-cut it cleanly.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/diamond.png" alt="diamond.png" /></div>
+          <div class="meta">
+            <span class="name">DIAMOND</span>
+            <span class="dims">134 × 131 · RGBA</span>
+            <span class="path">/public/assets/diamond.png</span>
+            <span class="usage">Not currently rendered. Drop-in spot: bottom-right corner (left=90.5%, top=83%).</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── /imagine PROMPTS ──────────────────────────────────────────── -->
+    <section>
+      <h2>8 · /imagine PROMPTS (six tiles)</h2>
+      <p class="blurb">prompts.png is the combined sprite of all 6 italic notes; prompts/p1..p6.png are split via scipy connected-component labelling so each can fade in/out independently.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts.png" alt="prompts.png" /></div>
+          <div class="meta">
+            <span class="name">PROMPTS (COMBINED)</span>
+            <span class="dims">1408 × 768 · RGBA</span>
+            <span class="path">/public/assets/prompts.png</span>
+            <span class="usage">Reference / fallback. The live app uses the split tiles below for per-prompt fades.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts/p1.png" alt="p1.png" /></div>
+          <div class="meta">
+            <span class="name">P1 · CREATE WORLD PEACE</span>
+            <span class="dims">~313 × 160 · RGBA</span>
+            <span class="path">/public/assets/prompts/p1.png</span>
+            <span class="usage">Positioned at left=10.87%, top=18.10% of the canvas.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts/p2.png" alt="p2.png" /></div>
+          <div class="meta">
+            <span class="name">P2 · BUILD OPUS 5.0</span>
+            <span class="dims">~296 × 143 · RGBA</span>
+            <span class="path">/public/assets/prompts/p2.png</span>
+            <span class="usage">Top-right of the canvas (left=71.16%, top=21.48%).</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts/p3.png" alt="p3.png" /></div>
+          <div class="meta">
+            <span class="name">P3 · BUILD OPUS / NO MISTAKES</span>
+            <span class="dims">~351 × 94 · RGBA</span>
+            <span class="path">/public/assets/prompts/p3.png</span>
+            <span class="usage">Middle-left (left=7.17%, top=44.14%).</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts/p4.png" alt="p4.png" /></div>
+          <div class="meta">
+            <span class="name">P4 · SYNTHESIZE NOSTALGIC</span>
+            <span class="dims">~382 × 231 · RGBA</span>
+            <span class="path">/public/assets/prompts/p4.png</span>
+            <span class="usage">Bottom-left, rotated (left=9.87%, top=58.85%).</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts/p5.png" alt="p5.png" /></div>
+          <div class="meta">
+            <span class="name">P5 · NOSTALGIC CYBERPUNK CITY</span>
+            <span class="dims">~326 × 136 · RGBA</span>
+            <span class="path">/public/assets/prompts/p5.png</span>
+            <span class="usage">Middle-right (left=72.59%, top=52.86%).</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/prompts/p6.png" alt="p6.png" /></div>
+          <div class="meta">
+            <span class="name">P6 · GENERATE PROFIT</span>
+            <span class="dims">~230 × 113 · RGBA</span>
+            <span class="path">/public/assets/prompts/p6.png</span>
+            <span class="usage">Bottom-right (left=73.93%, top=73.18%).</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ARCADE BASE ───────────────────────────────────────────────── -->
+    <section>
+      <h2>9 · ARCADE MACHINE — BASE</h2>
+      <p class="blurb">Canonical render: rembg-cut from the source, transparent surroundings. Used when no tier is known yet (idle state, just-loaded page).</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap"><img src="/arcade-machine.png" alt="arcade-machine.png" /></div>
+          <div class="meta">
+            <span class="name">ARCADE-MACHINE</span>
+            <span class="dims">580 × 440 · RGBA</span>
+            <span class="path">/public/arcade-machine.png</span>
+            <span class="usage">Default in `PixelArcade.tsx`. Center of the canvas (left=32.67%, top=18.88%, w=41.19%, h=57.29%).</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ARCADE TIER PALETTES ──────────────────────────────────────── -->
+    <section>
+      <h2>10 · ARCADE TIER PALETTES (recolored variants)</h2>
+      <p class="blurb">Generated by the <code>arcade_recolor</code> tool in <code>libresprite-mcp</code>. Each variant remaps the four neon hues (magenta / cyan / green / amber) to a tier palette while preserving alpha + luminance. `PixelArcade.tsx` picks the variant by the result tier.</p>
+      <div class="palette-row">
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/arcade/arcade-corpse.png" alt="arcade-corpse.png" /></div>
+          <div class="meta">
+            <span class="name palette-tier-corpse">CORPSE · 0-30</span>
+            <span class="dims">580 × 440 · RGBA</span>
+            <span class="path">/public/assets/arcade/arcade-corpse.png</span>
+            <span class="usage">Score &lt; 31. Desaturated grey-blue. Dead arcade.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/arcade/arcade-sweetspot.png" alt="arcade-sweetspot.png" /></div>
+          <div class="meta">
+            <span class="name palette-tier-sweetspot">SWEETSPOT · 31-70</span>
+            <span class="dims">580 × 440 · RGBA</span>
+            <span class="path">/public/assets/arcade/arcade-sweetspot.png</span>
+            <span class="usage">Optimal shipping zone. Neon green.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/arcade/arcade-abyss.png" alt="arcade-abyss.png" /></div>
+          <div class="meta">
+            <span class="name palette-tier-abyss">ABYSS · 71-95</span>
+            <span class="dims">580 × 440 · RGBA</span>
+            <span class="path">/public/assets/arcade/arcade-abyss.png</span>
+            <span class="usage">Aggressively over-scoped. Warning amber.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/arcade/arcade-delusion.png" alt="arcade-delusion.png" /></div>
+          <div class="meta">
+            <span class="name palette-tier-delusion">DELUSION · 96-100</span>
+            <span class="dims">580 × 440 · RGBA</span>
+            <span class="path">/public/assets/arcade/arcade-delusion.png</span>
+            <span class="usage">Total timeline extinction. Hot pink/red.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ARCADE SWIRL-BAKED ANIMATIONS (PER TIER) ──────────────────── -->
+    <section>
+      <h2>11 · TIER SWIRL ANIMATIONS (baked into the sprite)</h2>
+      <p class="blurb">8-frame sprite sheets where the CRT screen interior <em>rotates</em> per frame. The cabinet, cables, and bezel are pixel-identical across frames — only the swirl moves. No CSS overlay; the rotation is baked into the asset.</p>
+
+      <!-- BIG HERO ANIMATION — full-size playing demo with tier picker + speed -->
+      <div style="margin-bottom: 14px; padding: 14px; border: 1px solid rgba(57,255,20,0.2); background: rgba(0,0,0,0.5);">
+        <div id="heroAnim" class="swirl-anim-hero" title="click to swap tier"></div>
+        <div class="speed-controls" style="margin-top: 14px;">
+          <strong style="margin-right: 8px; opacity: 0.6;">TIER:</strong>
+          <button data-tier="corpse">CORPSE</button>
+          <button data-tier="sweetspot" class="active">SWEETSPOT</button>
+          <button data-tier="abyss">ABYSS</button>
+          <button data-tier="delusion">DELUSION</button>
+        </div>
+        <div class="speed-controls">
+          <strong style="margin-right: 8px; opacity: 0.6;">SPEED:</strong>
+          <button data-speed="3.2">0.25x</button>
+          <button data-speed="1.6" class="active">1x</button>
+          <button data-speed="0.8">2x</button>
+          <button data-speed="0.4">4x</button>
+        </div>
+      </div>
+
+      <h3 style="font-family: 'Press Start 2P'; font-size: 9px; letter-spacing: 0.18em; margin: 16px 0 8px; opacity: 0.7;">ALL FOUR TIERS — PLAYING LIVE</h3>
+      <div class="palette-row">
+        <div class="card">
+          <div class="imgwrap"><div class="swirl-anim corpse"></div></div>
+          <div class="meta">
+            <span class="name palette-tier-corpse">CORPSE · ANIMATED</span>
+            <span class="dims">580 × 440 frame · 8 frames @ 0.2s</span>
+            <span class="path">/public/assets/arcade/arcade-corpse-anim.png</span>
+            <span class="usage">Tier=corpse. Desaturated, slow rotation feel.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><div class="swirl-anim sweetspot"></div></div>
+          <div class="meta">
+            <span class="name palette-tier-sweetspot">SWEETSPOT · ANIMATED</span>
+            <span class="dims">580 × 440 frame · 8 frames @ 0.2s</span>
+            <span class="path">/public/assets/arcade/arcade-sweetspot-anim.png</span>
+            <span class="usage">Tier=sweetspot. The "go ship it" energy.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><div class="swirl-anim abyss"></div></div>
+          <div class="meta">
+            <span class="name palette-tier-abyss">ABYSS · ANIMATED</span>
+            <span class="dims">580 × 440 frame · 8 frames @ 0.2s</span>
+            <span class="path">/public/assets/arcade/arcade-abyss-anim.png</span>
+            <span class="usage">Tier=abyss. Amber alarm.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><div class="swirl-anim delusion"></div></div>
+          <div class="meta">
+            <span class="name palette-tier-delusion">DELUSION · ANIMATED</span>
+            <span class="dims">580 × 440 frame · 8 frames @ 0.2s</span>
+            <span class="path">/public/assets/arcade/arcade-delusion-anim.png</span>
+            <span class="usage">Tier=delusion. Pure pink panic.</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="font-family: 'Press Start 2P'; font-size: 9px; letter-spacing: 0.18em; margin: 16px 0 8px; opacity: 0.7;">RAW STRIP (REFERENCE)</h3>
+      <p class="blurb" style="font-size: 14px;">The full 4640 × 440 horizontal sprite sheet — 8 frames @ 580 px each, played left-to-right.</p>
+      <div class="card" style="max-width: 100%;">
+        <div class="imgwrap"><img src="/assets/arcade/arcade-sweetspot-anim.png" alt="sweetspot strip" style="max-height:200px" /></div>
+        <div class="meta">
+          <span class="name">SWEETSPOT · FULL STRIP</span>
+          <span class="dims">4640 × 440 · RGBA</span>
+          <span class="path">/public/assets/arcade/arcade-sweetspot-anim.png</span>
+          <span class="usage">The other 3 tiers follow the same layout.</span>
+        </div>
+      </div>
+
+      <script>
+        (function(){
+          const hero  = document.getElementById("heroAnim");
+          const tiers = document.querySelectorAll('[data-tier]');
+          const speeds = document.querySelectorAll('[data-speed]');
+          let currentTier = "sweetspot";
+          let currentSpeed = "1.6";
+          function apply() {
+            hero.style.backgroundImage = `url("/assets/arcade/arcade-${currentTier}-anim.png")`;
+            hero.style.animation = `arcade-swirl ${currentSpeed}s steps(8) infinite`;
+          }
+          tiers.forEach(b => b.addEventListener("click", () => {
+            tiers.forEach(x => x.classList.remove("active"));
+            b.classList.add("active");
+            currentTier = b.dataset.tier;
+            apply();
+          }));
+          speeds.forEach(b => b.addEventListener("click", () => {
+            speeds.forEach(x => x.classList.remove("active"));
+            b.classList.add("active");
+            currentSpeed = b.dataset.speed;
+            apply();
+          }));
+        })();
+      </script>
+    </section>
+
+    <!-- ── ARCADE GLOBAL ANIMATION (legacy, glow-pulse) ───────────────── -->
+    <section>
+      <h2>12 · LEGACY GLOW-PULSE ANIMATION (no swirl rotation)</h2>
+      <p class="blurb">6-frame horizontal sheet (3480×440) generated by <code>arcade_animate</code>. Frames are pixel-jittered with a glow pulse on odd frames. Used during <code>state === "scanning"</code>.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="imgwrap" style="min-height:240px">
+            <div class="anim" title="CSS animation playing the sprite sheet"></div>
+          </div>
+          <div class="meta">
+            <span class="name">ARCADE-ANIMATED (PLAYING)</span>
+            <span class="dims">580 × 440 frame · 6 frames @ 0.12s</span>
+            <span class="path">/public/assets/arcade/arcade-animated.png</span>
+            <span class="usage">`PixelArcade.tsx` swaps to a `background-image` div with `animation: arcade-anim ... steps(6)` while a scan is in flight.</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/assets/arcade/arcade-animated.png" alt="arcade-animated.png" /></div>
+          <div class="meta">
+            <span class="name">ARCADE-ANIMATED (FULL STRIP)</span>
+            <span class="dims">3480 × 440 · RGBA</span>
+            <span class="path">/public/assets/arcade/arcade-animated.png</span>
+            <span class="usage">The raw 6-frame sheet. JSON sidecar: <a href="/assets/arcade/arcade-animated.json" target="_blank">arcade-animated.json</a>.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CABLES → CYOA DIMENSION PATHS ─────────────────────────────── -->
+    <section>
+      <h2>12 · CABLE HOTSPOTS — choose-your-own-adventure plan</h2>
+      <p class="blurb">Five cables exit the right side of the cabinet. Each one will become a clickable creep-dimension hotspot in <code>Hero.tsx</code>: hover lights it up, click drills into that dimension and the readout updates with the new creep path. Below is the cable endpoint map in asset-percent and page-percent (where the buttons land on the live canvas).</p>
+      <div class="composite" style="aspect-ratio: 1408 / 768; max-width:960px; margin: 0 auto;">
+        <img src="/scopecreeper-hero.png" alt="" style="opacity:0.4" />
+        <!-- Five hotspot dots over the live arcade cable endpoints. -->
+        <div style="position:absolute; left:70.1%; top:27.5%; width:24px; height:24px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle, #39ff14, transparent 70%); box-shadow:0 0 12px #39ff14; display:flex; align-items:center; justify-content:center; font-family:'Press Start 2P'; font-size:8px; color:#000;">1</div>
+        <div style="position:absolute; left:73.5%; top:33.2%; width:24px; height:24px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle, #ff007f, transparent 70%); box-shadow:0 0 12px #ff007f; display:flex; align-items:center; justify-content:center; font-family:'Press Start 2P'; font-size:8px; color:#000;">2</div>
+        <div style="position:absolute; left:73.5%; top:38.9%; width:24px; height:24px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle, #00ffff, transparent 70%); box-shadow:0 0 12px #00ffff; display:flex; align-items:center; justify-content:center; font-family:'Press Start 2P'; font-size:8px; color:#000;">3</div>
+        <div style="position:absolute; left:72.2%; top:47.5%; width:24px; height:24px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle, #ffb000, transparent 70%); box-shadow:0 0 12px #ffb000; display:flex; align-items:center; justify-content:center; font-family:'Press Start 2P'; font-size:8px; color:#000;">4</div>
+        <div style="position:absolute; left:68.9%; top:56.1%; width:24px; height:24px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle, #4d4dff, transparent 70%); box-shadow:0 0 12px #4d4dff; display:flex; align-items:center; justify-content:center; font-family:'Press Start 2P'; font-size:8px; color:#000;">5</div>
+      </div>
+      <pre style="font-family:'VT323',monospace; font-size:15px; line-height:1.4; color:var(--green); opacity:0.9; white-space:pre; margin-top:16px;">
+CABLE  COLOR     ASSET-%        PAGE-%          ASSIGNS TO
+─────  ───────  ─────────────  ──────────────  ─────────────────────────
+ #1    green    91.9, 15.9     70.1%, 27.5%    dimensions[0]   (top wire)
+ #2    magenta  99.8, 26.4     73.5%, 33.2%    dimensions[1]
+ #3    cyan     99.8, 35.0     73.5%, 38.9%    dimensions[2]
+ #4    amber    96.4, 50.5     72.2%, 47.5%    dimensions[3]
+ #5    blue     87.0, 65.1     68.9%, 56.1%    dimensions[4]   (bottom wire)
+      </pre>
+      <p class="blurb" style="margin-top:16px;">Behavior plan: when a thread is focused and <code>result.dimensions[]</code> has at least 1 entry, the five hotspots become buttons. Each one is given an <code>aria-label</code> of the dimension's <code>label</code>, a tooltip showing the <code>blurb</code>, and an <code>onClick</code> that calls <code>creep.drillInto(dimension)</code>. Cables not bound to a dimension stay dim; bound cables pulse the cable's neon color. After the drill, the readout updates and the cable's hotspot now represents the next-level dimensions (recursive CYOA).</p>
+    </section>
+
+    <!-- ── REFERENCE GROUPED INTEGRATION MAP ─────────────────────────── -->
+    <section>
+      <h2>14 · REFERENCE :: INTEGRATION MAP</h2>
+      <p class="blurb">Where each asset lands in the live React tree. Use this when wiring new sprites — keep the same z-order and positioning percentages so the layout stays consistent.</p>
+      <pre style="font-family:'VT323',monospace; font-size:15px; line-height:1.4; color:var(--green); opacity:0.85; white-space:pre-wrap; word-break:break-word;">Hero.tsx
+├── &lt;img src="/assets/background.png" /&gt;             z = base
+├── &lt;img src="/assets/code.png"        /&gt;             fx-flicker
+├── &lt;PixelArcade tier=&lt;tier&gt;&gt;                          left=32.67% top=18.88% w=41.19% h=57.29%
+│     idle/done  → /arcade-machine.png  OR  /assets/arcade/arcade-{tier}.png
+│     scanning   → /assets/arcade/arcade-animated.png (steps(6))
+│
+├── prompts/p1..p6.png                                random per-tile fade
+├── &lt;img src="/assets/headline.png" /&gt; × 3            fx-headline-shake + hue-rotate ghosts
+├── &lt;img src="/assets/terminal.png"  /&gt;               left=35.44% top=77.47% (fx-terminal-pulse)
+├── &lt;CorrodingBezel /&gt;                                z = 20
+│     loads /assets/bezel.png → &lt;canvas&gt; pixel mutation
+└── &lt;form&gt;input&lt;/form&gt; + &lt;a&gt; hotspots                z = 30 (over the icons)</pre>
+    </section>
+
+  </main>
+
+  <footer>
+    libresprite-mcp · arcade asset pipeline · scopecreeper.ai
+  </footer>
+
+</body>
+</html>
