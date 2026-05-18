@@ -74,11 +74,12 @@ export default function SkillTreeView({
   }, [onClose]);
 
   // viewBox sized to the laid-out nodes + padding for boxes.
-  const PAD_X = NODE_W;
+  // Use ROOT_W on the left so the root card never clips, and NODE_W
+  // on the right for the deepest column.
   const PAD_Y = NODE_H + 40;
-  const minX = layout.bounds.minX - PAD_X / 2;
+  const minX = layout.bounds.minX - ROOT_W;
   const minY = layout.bounds.minY - PAD_Y / 2;
-  const w = Math.max(900, layout.bounds.maxX - minX + PAD_X);
+  const w = Math.max(1000, layout.bounds.maxX - minX + NODE_W);
   const h = Math.max(540, layout.bounds.maxY - minY + PAD_Y);
 
   // Pick the right card to render in the side panel.
@@ -222,17 +223,17 @@ export default function SkillTreeView({
                       <>
                         <text
                           x={W - 10}
-                          y={26}
+                          y={22}
                           textAnchor="end"
                           fill={color}
-                          opacity={0.85}
+                          opacity={0.9}
                           style={{
                             fontFamily: "var(--font-press-start-2p), monospace",
                             fontSize: 8,
-                            letterSpacing: "0.15em",
+                            letterSpacing: "0.2em",
                           }}
                         >
-                          {thread.input.kind === "repo" ? "REPO" : "INPUT"}
+                          {thread.input.kind === "repo" ? "REPO" : "SEED"}
                         </text>
                         <foreignObject x={10} y={38} width={W - 20} height={H - 44}>
                           <div
@@ -331,6 +332,22 @@ export default function SkillTreeView({
                         : "pending-pulse 2.4s ease-in-out infinite",
                     }}
                   />
+                  {/* Top-right creep badge first so it claims space.
+                       Label is then truncated to fit the remaining width. */}
+                  <text
+                    x={NODE_W - 10}
+                    y={20}
+                    textAnchor="end"
+                    fill={color}
+                    opacity={0.9}
+                    style={{
+                      fontFamily: "var(--font-press-start-2p), monospace",
+                      fontSize: 8,
+                      letterSpacing: "0.15em",
+                    }}
+                  >
+                    CR·{n.creep}
+                  </text>
                   <text
                     x={12}
                     y={22}
@@ -341,9 +358,9 @@ export default function SkillTreeView({
                       letterSpacing: "0.1em",
                     }}
                   >
-                    {truncate(n.dimension.label, 22)}
+                    {truncate(n.dimension.label, 16)}
                   </text>
-                  <foreignObject x={12} y={28} width={NODE_W - 70} height={NODE_H - 32}>
+                  <foreignObject x={12} y={30} width={NODE_W - 24} height={NODE_H - 34}>
                     <div
                       style={{
                         fontFamily: "var(--font-vt323), monospace",
@@ -359,20 +376,6 @@ export default function SkillTreeView({
                       {n.dimension.blurb}
                     </div>
                   </foreignObject>
-                  <text
-                    x={NODE_W - 10}
-                    y={22}
-                    textAnchor="end"
-                    fill={color}
-                    opacity={0.85}
-                    style={{
-                      fontFamily: "var(--font-press-start-2p), monospace",
-                      fontSize: 8,
-                      letterSpacing: "0.15em",
-                    }}
-                  >
-                    CREEP·{n.creep}
-                  </text>
                 </g>
               );
             })}
