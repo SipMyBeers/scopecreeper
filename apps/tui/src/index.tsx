@@ -4,7 +4,7 @@ import { render, Box, Text, useInput, useApp } from "ink";
 import TextInput from "ink-text-input";
 import {
   discoverRepos, loadScopeDoc, addRepoToConfig, removeRepoFromConfig,
-  getLatestCommit, getRecentCommits, type TrackedRepo,
+  getRecentCommits, type TrackedRepo,
 } from "./discovery.js";
 import { watchRepo, unwatchAll } from "./watcher.js";
 import { scanText, askCreeper } from "./api.js";
@@ -14,7 +14,9 @@ import ChatPane, { type ChatMessage } from "./components/ChatPane.js";
 
 let eventCounter = 0;
 
-type Mode = "normal" | "add-repo" | "chat";
+// 0=repos 1=feed 2=chat
+type Panel = 0 | 1 | 2;
+type Mode = "nav" | "add-repo" | "chat-input";
 
 function App() {
   const { exit } = useApp();
@@ -23,26 +25,35 @@ function App() {
   const [events, setEvents] = useState<DriftEvent[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [mode, setMode] = useState<Mode>("normal");
+  const [mode, setMode] = useState<Mode>("nav");
   const [addInput, setAddInput] = useState("");
   const [addError, setAddError] = useState("");
+  const [activePanel, setActivePanel] = useState<Panel>(0);
   const [selectedRepo, setSelectedRepo] = useState(0);
+  const [selectedEvent, setSelectedEvent] = useState(0);
   const [status, setStatus] = useState("booting...");
   const scopeDocs = useRef<Map<string, string>>(new Map());
 
+  const ensureHealth = (path: string, name: string) => (prev: Map<string, RepoHealth>) => {
+    const next = new Map(prev);
+    if (!next.has(path)) next.set(path, { name, path, score: null, tier: null, scanning: false });
+    return next;
+  };
+
   const runInitialScan = useCallback(async (repo: TrackedRepo) => {
     const scopeDoc = scopeDocs.current.get(repo.path) ?? "";
-    const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false, error: false };
     setHealth((prev) => {
       const next = new Map(prev);
+      const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false };
       next.set(repo.path, { ...(next.get(repo.path) ?? base), scanning: true });
       return next;
     });
     const recent = getRecentCommits(repo.path, 5);
-    const payload = `Recent commits:\n${recent}\n\nDeclared scope:\n${scopeDoc.slice(0, 1000)}`;
+    const payload = `Recent commits:\n${recent}\n\nScope:\n${scopeDoc.slice(0, 800)}`;
     const result = await scanText(payload, scopeDoc);
     setHealth((prev) => {
       const next = new Map(prev);
+      const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false };
       next.set(repo.path, {
         ...(next.get(repo.path) ?? base),
         scanning: false,
@@ -58,7 +69,7 @@ function App() {
     scopeDocs.current.set(repo.path, scopeDoc);
     watchRepo(repo.path, async (repoPath, commit) => {
       const id = String(++eventCounter);
-      const repoName = repos.find((r) => r.path === repoPath)?.name ?? repoPath.split("/").pop() ?? "";
+      const repoName = repoPath.split("/").pop() ?? repoPath;
       const ev: DriftEvent = {
         id, repoName, hash: commit.hash, subject: commit.subject,
         score: null, tier: null, verdict: null, analysis: null,
@@ -71,14 +82,12 @@ function App() {
         next.set(repoPath, { ...h, scanning: true });
         return next;
       });
-      const payload = `Commit: ${commit.subject}\n\nFiles changed:\n${commit.diffStat}`;
+      const payload = `Commit: ${commit.subject}\n\nFiles:\n${commit.diffStat}`;
       const result = await scanText(payload, scopeDoc);
-      setEvents((prev) =>
-        prev.map((e) => e.id === id
-          ? { ...e, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null, verdict: result?.verdict ?? null, analysis: result?.analysis ?? null }
-          : e
-        )
-      );
+      setEvents((prev) => prev.map((e) => e.id === id
+        ? { ...e, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null, verdict: result?.verdict ?? null, analysis: result?.analysis ?? null }
+        : e
+      ));
       setHealth((prev) => {
         const next = new Map(prev);
         const h = next.get(repoPath) ?? { name: repoName, path: repoPath, score: null, tier: null, scanning: false };
@@ -86,19 +95,15 @@ function App() {
         return next;
       });
     });
-  }, [repos]);
+  }, []);
 
-  // Initial discovery
   useEffect(() => {
     discoverRepos().then(async (found) => {
       setRepos(found);
-      setStatus(`watching ${found.length} repo${found.length !== 1 ? "s" : ""} · a=add r=remove`);
+      setStatus(`${found.length} repo${found.length !== 1 ? "s" : ""} · ←→ panels · ↑↓ select · a add · r remove`);
       const initHealth = new Map<string, RepoHealth>();
-      for (const r of found) {
-        initHealth.set(r.path, { name: r.name, path: r.path, score: null, tier: null, scanning: false });
-      }
+      for (const r of found) initHealth.set(r.path, { name: r.name, path: r.path, score: null, tier: null, scanning: false });
       setHealth(new Map(initHealth));
-      // Load scope docs + initial scan + watchers
       await Promise.all(found.map(async (repo) => {
         const scopeDoc = await loadScopeDoc(repo.path);
         attachRepo(repo, scopeDoc);
@@ -109,59 +114,71 @@ function App() {
   }, []);
 
   useInput((input, key) => {
-    if (mode === "add-repo" || mode === "chat") return;
+    if (mode === "add-repo" || mode === "chat-input") return;
 
-    if (key.escape || (key.ctrl && input === "c")) {
-      unwatchAll();
-      exit();
-      return;
-    }
-    if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); return; }
-    if (input === "r") {
-      const repo = repos[selectedRepo];
-      if (repo) {
-        removeRepoFromConfig(repo.path);
-        setRepos((prev) => prev.filter((_, i) => i !== selectedRepo));
-        setHealth((prev) => { const next = new Map(prev); next.delete(repo.path); return next; });
-        setSelectedRepo((i) => Math.max(0, i - 1));
+    if (key.escape || (key.ctrl && input === "c")) { unwatchAll(); exit(); return; }
+
+    // Panel switching
+    if (key.leftArrow) { setActivePanel((p) => Math.max(0, p - 1) as Panel); return; }
+    if (key.rightArrow) { setActivePanel((p) => Math.min(2, p + 1) as Panel); return; }
+
+    // Panel-specific actions
+    if (activePanel === 0) {
+      if (key.upArrow) setSelectedRepo((i) => Math.max(0, i - 1));
+      if (key.downArrow) setSelectedRepo((i) => Math.min(repos.length - 1, i + 1));
+      if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); }
+      if (input === "r") {
+        const repo = repos[selectedRepo];
+        if (repo) {
+          removeRepoFromConfig(repo.path);
+          setRepos((prev) => prev.filter((_, i) => i !== selectedRepo));
+          setHealth((prev) => { const next = new Map(prev); next.delete(repo.path); return next; });
+          setSelectedRepo((i) => Math.max(0, i - 1));
+        }
       }
-      return;
+      if (input === "s") runInitialScan(repos[selectedRepo]);
     }
-    if (key.tab) { setMode("chat"); return; }
-    if (key.upArrow) setSelectedRepo((i) => Math.max(0, i - 1));
-    if (key.downArrow) setSelectedRepo((i) => Math.min(repos.length - 1, i + 1));
+
+    if (activePanel === 1) {
+      if (key.upArrow) setSelectedEvent((i) => Math.max(0, i - 1));
+      if (key.downArrow) setSelectedEvent((i) => Math.min(events.length - 1, i + 1));
+    }
+
+    if (activePanel === 2) {
+      if (input === "\r" || key.return) setMode("chat-input");
+    }
+
+    if (input === "\t" || key.tab) {
+      setActivePanel((p) => ((p + 1) % 3) as Panel);
+    }
   });
 
   const handleAddSubmit = useCallback(async (val: string) => {
-    if (!val.trim()) { setMode("normal"); return; }
+    if (!val.trim()) { setMode("nav"); return; }
     const ok = await addRepoToConfig(val.trim());
-    if (!ok) { setAddError(`path not found: ${val.trim()}`); return; }
+    if (!ok) { setAddError(`not found: ${val.trim()}`); return; }
     const name = val.trim().replace(/\/$/, "").split("/").pop() ?? val;
     const newRepo: TrackedRepo = { name, path: val.trim(), scopeDoc: "" };
     setRepos((prev) => [...prev, newRepo]);
-    setHealth((prev) => {
-      const next = new Map(prev);
-      next.set(newRepo.path, { name, path: newRepo.path, score: null, tier: null, scanning: false });
-      return next;
-    });
-    setMode("normal");
+    setHealth(ensureHealth(newRepo.path, name));
+    setMode("nav");
     setAddInput("");
-    setStatus(`watching ${repos.length + 1} repos · a=add r=remove`);
     const scopeDoc = await loadScopeDoc(newRepo.path);
     attachRepo(newRepo, scopeDoc);
     runInitialScan(newRepo);
-  }, [repos, attachRepo, runInitialScan]);
+  }, [attachRepo, runInitialScan]);
 
   const handleChatSubmit = useCallback(async (val: string) => {
-    if (!val.trim()) { setMode("normal"); return; }
-    if (val === "/exit" || val === "/q") { setMode("normal"); setChatInput(""); return; }
+    setMode("nav");
+    if (!val.trim()) return;
+    if (val === "/q" || val === "/exit") { setChatInput(""); return; }
     setChatInput("");
     setMessages((prev) => [...prev, { role: "user", text: val, ts: new Date() }]);
     const repo = repos[selectedRepo];
-    const context = repo
-      ? `Repo: ${repo.name}\nRecent events: ${events.slice(-3).map((e) => `${e.subject} [${e.score ?? "??"}]`).join("; ")}`
+    const ctx = repo
+      ? `Repo: ${repo.name}\nRecent: ${events.slice(-3).map((e) => `${e.subject}[${e.score ?? "??"}]`).join("; ")}`
       : "No repo selected.";
-    const reply = await askCreeper(val, context);
+    const reply = await askCreeper(val, ctx);
     setMessages((prev) => [...prev, { role: "creeper", text: reply, ts: new Date() }]);
   }, [repos, selectedRepo, events]);
 
@@ -169,40 +186,65 @@ function App() {
     health.get(r.path) ?? { name: r.name, path: r.path, score: null, tier: null, scanning: false }
   );
 
+  const panelBorder = (p: Panel) => activePanel === p ? "#ff007f" : "#39ff14";
+
   return (
     <Box flexDirection="column">
-      <Box paddingX={1}>
-        <Text color="#ff007f" bold>🌀 SCOPE CREEPER  </Text>
-        <Text color="#39ff14">{status}  </Text>
-        <Text color="gray">↑↓ select · tab chat · a add · r remove · esc quit</Text>
+      {/* Header */}
+      <Box paddingX={1} gap={2}>
+        <Text color="#ff007f" bold>🌀 SCOPE CREEPER</Text>
+        <Text color="#39ff14">{status}</Text>
       </Box>
 
+      {/* Add-repo input bar */}
       {mode === "add-repo" && (
         <Box borderStyle="single" borderColor="#ff007f" paddingX={2} marginX={1}>
-          <Text color="#ff007f" bold>ADD REPO  </Text>
+          <Text color="#ff007f" bold>ADD  </Text>
           <TextInput
             value={addInput}
             onChange={setAddInput}
             onSubmit={handleAddSubmit}
-            placeholder="/path/to/repo  (enter to confirm, esc to cancel)"
+            placeholder="/absolute/path/to/repo"
           />
-          {addError ? <Text color="red">  {addError}</Text> : null}
+          {addError ? <Text color="red">  ✗ {addError}</Text> : null}
         </Box>
       )}
 
+      {/* Panels */}
       <Box flexDirection="row">
-        <RepoList repos={healthList} selected={selectedRepo} />
-        <DriftFeed events={events} />
+        <RepoList
+          repos={healthList}
+          selected={selectedRepo}
+          active={activePanel === 0}
+          borderColor={panelBorder(0)}
+        />
+        <DriftFeed
+          events={events}
+          selected={selectedEvent}
+          active={activePanel === 1}
+          borderColor={panelBorder(1)}
+        />
         <ChatPane
           messages={messages}
           input={chatInput}
-          focused={mode === "chat"}
+          active={activePanel === 2}
+          inputActive={mode === "chat-input"}
           onInputChange={setChatInput}
           onSubmit={handleChatSubmit}
+          borderColor={panelBorder(2)}
         />
+      </Box>
+
+      {/* Footer hints */}
+      <Box paddingX={1}>
+        <Text color="gray">
+          {activePanel === 0 && "↑↓ select · a add · r remove · s rescan · → next panel"}
+          {activePanel === 1 && "↑↓ scroll feed · ← prev · → next panel"}
+          {activePanel === 2 && (mode === "chat-input" ? "enter send · /q back" : "enter to type · ← prev panel")}
+        </Text>
       </Box>
     </Box>
   );
 }
 
-render(<App />);
+render(<App />, { patchConsole: true });

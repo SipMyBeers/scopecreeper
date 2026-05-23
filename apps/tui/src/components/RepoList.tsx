@@ -13,6 +13,8 @@ export interface RepoHealth {
 interface Props {
   repos: RepoHealth[];
   selected: number;
+  active?: boolean;
+  borderColor?: string;
 }
 
 function tierColor(tier: string | null): string {
@@ -28,10 +30,10 @@ function scoreLine(score: number): string {
   return "▓".repeat(filled) + "░".repeat(10 - filled) + ` ${score}`;
 }
 
-export default function RepoList({ repos, selected }: Props) {
+export default function RepoList({ repos, selected, active, borderColor = "#39ff14" }: Props) {
   return (
-    <Box flexDirection="column" width={26} borderStyle="single" borderColor="#39ff14" paddingX={1}>
-      <Text color="#39ff14" bold>REPOS ({repos.length})</Text>
+    <Box flexDirection="column" width={26} borderStyle="single" borderColor={borderColor} paddingX={1}>
+      <Text color={active ? "#ff007f" : "#39ff14"} bold>REPOS ({repos.length})</Text>
       <Text> </Text>
       {repos.length === 0 && (
         <Text color="gray">no repos — press a</Text>

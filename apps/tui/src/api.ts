@@ -8,17 +8,19 @@ export interface ScanResult {
   analysis: string;
 }
 
-export async function scanText(text: string, scopeDoc?: string): Promise<ScanResult | null> {
+function headers(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) h["x-api-key"] = API_KEY;
+  return h;
+}
+
+export async function scanText(text: string, _scopeDoc?: string): Promise<ScanResult | null> {
   try {
-    const body: Record<string, string> = { description: text.slice(0, 4000) };
-    if (scopeDoc) body.scopeDoc = scopeDoc.slice(0, 2000);
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (API_KEY) headers["x-api-key"] = API_KEY;
     const res = await fetch(`${BASE}/api/score`, {
       method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(12000),
+      headers: headers(),
+      body: JSON.stringify({ kind: "chatlog", payload: text.slice(0, 4000) }),
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) return null;
     const data = await res.json() as Record<string, unknown>;
@@ -33,23 +35,16 @@ export async function scanText(text: string, scopeDoc?: string): Promise<ScanRes
   }
 }
 
-export interface KillResult {
-  title: string;
-  body: string;
-}
-
 export async function askCreeper(question: string, context: string): Promise<string> {
   try {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (API_KEY) headers["x-api-key"] = API_KEY;
     const payload = `${question}\n\nContext:\n${context}`.slice(0, 3000);
     const res = await fetch(`${BASE}/api/score`, {
       method: "POST",
-      headers,
-      body: JSON.stringify({ description: payload }),
+      headers: headers(),
+      body: JSON.stringify({ kind: "chatlog", payload }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) return `[HTTP ${res.status}]`;
+    if (!res.ok) return `[HTTP ${res.status} — ${BASE}/api/score]`;
     const data = await res.json() as Record<string, unknown>;
     const verdict = String(data.verdict ?? "").toUpperCase();
     const analysis = String(data.analysis ?? "");
