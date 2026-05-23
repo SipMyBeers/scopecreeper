@@ -32,10 +32,10 @@ function App() {
 
   const runInitialScan = useCallback(async (repo: TrackedRepo) => {
     const scopeDoc = scopeDocs.current.get(repo.path) ?? "";
+    const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false, error: false };
     setHealth((prev) => {
       const next = new Map(prev);
-      const h = next.get(repo.path);
-      if (h) next.set(repo.path, { ...h, scanning: true });
+      next.set(repo.path, { ...(next.get(repo.path) ?? base), scanning: true });
       return next;
     });
     const recent = getRecentCommits(repo.path, 5);
@@ -43,8 +43,13 @@ function App() {
     const result = await scanText(payload, scopeDoc);
     setHealth((prev) => {
       const next = new Map(prev);
-      const h = next.get(repo.path);
-      if (h) next.set(repo.path, { ...h, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null });
+      next.set(repo.path, {
+        ...(next.get(repo.path) ?? base),
+        scanning: false,
+        score: result?.score ?? null,
+        tier: result?.tier ?? null,
+        error: result === null,
+      });
       return next;
     });
   }, []);
@@ -62,8 +67,8 @@ function App() {
       setEvents((prev) => [...prev, ev]);
       setHealth((prev) => {
         const next = new Map(prev);
-        const h = next.get(repoPath);
-        if (h) next.set(repoPath, { ...h, scanning: true });
+        const h = next.get(repoPath) ?? { name: repoName, path: repoPath, score: null, tier: null, scanning: false };
+        next.set(repoPath, { ...h, scanning: true });
         return next;
       });
       const payload = `Commit: ${commit.subject}\n\nFiles changed:\n${commit.diffStat}`;
@@ -76,8 +81,8 @@ function App() {
       );
       setHealth((prev) => {
         const next = new Map(prev);
-        const h = next.get(repoPath);
-        if (h) next.set(repoPath, { ...h, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null });
+        const h = next.get(repoPath) ?? { name: repoName, path: repoPath, score: null, tier: null, scanning: false };
+        next.set(repoPath, { ...h, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null });
         return next;
       });
     });
