@@ -82,6 +82,10 @@ import Modal from "./components/Modal.js";
 import WhyPrompt from "./components/WhyPrompt.js";
 import JustificationLog from "./components/JustificationLog.js";
 import SessionWatch from "./components/SessionWatch.js";
+import ActionPicker from "./components/ActionPicker.js";
+import { appendDiary, scoreActions, type Action } from "./diary.js";
+import { copyToClipboard, buildRedirectPrompt } from "./clipboard.js";
+import { expandScope } from "./expand-scope.js";
 
 let eventCounter = 0;
 
@@ -93,6 +97,7 @@ type ModalState =
   | { kind: "event-detail"; eventId: string }
   | { kind: "kill"; repoPath: string; loading: boolean; artifact: Artifact | null }
   | { kind: "why"; pending: PendingWhy }
+  | { kind: "action"; pending: PendingWhy; selected: Action }
   | { kind: "log"; entries: Justification[]; filter?: string }
   | {
       kind: "session-watch";
@@ -241,6 +246,65 @@ function App() {
     return () => unwatchAll();
   }, []);
 
+  const executeAction = useCallback(async (pending: PendingWhy, action: Action) => {
+    const scores = scoreActions(pending.score);
+    const scopeDoc = scopeDocs.current.get(pending.path) ?? "";
+    let note = "";
+
+    if (action === "REDIRECT") {
+      const prompt = buildRedirectPrompt({
+        repoName: pending.repo, driftSubject: pending.subject,
+        verdict: pending.verdict, analysis: pending.analysis, scopeDoc,
+      });
+      copyToClipboard(prompt);
+      note = "redirect prompt copied to clipboard — paste into Claude";
+    } else if (action === "EXPAND") {
+      try {
+        const added = await expandScope(pending.path, pending.subject);
+        note = `appended to scope doc: ${added}`;
+      } catch (e) {
+        note = `expand failed: ${e instanceof Error ? e.message : "?"}`;
+      }
+    } else if (action === "KILL") {
+      // Trigger the existing KILL flow — leaves the action picker open
+      // for a beat so the user sees the choice landed, then the kill
+      // modal takes over.
+      runKill(pending.path);
+    } else if (action === "ACCEPT") {
+      note = "drift accepted, scope unchanged";
+    } else if (action === "DISMISSED") {
+      note = "dismissed without picking a route";
+    }
+
+    await appendDiary(pending.path, pending.repo, {
+      ts: new Date(), hash: pending.hash, subject: pending.subject,
+      driftScore: pending.score, tier: pending.tier,
+      verdict: pending.verdict, analysis: pending.analysis,
+      chosen: action, chosenScore: scores[action],
+      note,
+    });
+    await appendJustification({
+      repo: pending.repo, path: pending.path, hash: pending.hash,
+      subject: pending.subject, score: pending.score, tier: pending.tier,
+      verdict: pending.verdict, justification: `${action}: ${note}`,
+    });
+
+    // Advance queue or close
+    whyQueue.current = whyQueue.current.filter((q) => q.hash !== pending.hash);
+    if (action !== "KILL") {
+      const next = whyQueue.current[0];
+      if (next) {
+        const nextScores = scoreActions(next.score);
+        const rec = (Object.keys(nextScores) as Action[])
+          .filter((k) => k !== "DISMISSED")
+          .reduce((a, b) => nextScores[a] <= nextScores[b] ? a : b);
+        setModal({ kind: "action", pending: next, selected: rec });
+      } else {
+        setModal({ kind: "none" });
+      }
+    }
+  }, []);
+
   const submitWhy = useCallback(async (val: string) => {
     if (modal.kind !== "why") return;
     const p = modal.pending;
@@ -366,6 +430,19 @@ function App() {
       if (key.escape) { dismissWhy(); return; }
       return; // Let WhyPrompt handle enter via its TextInput
     }
+    if (modal.kind === "action") {
+      const order: Action[] = ["REDIRECT", "EXPAND", "KILL", "ACCEPT"];
+      const idx = order.indexOf(modal.selected);
+      if (key.upArrow) { setModal({ ...modal, selected: order[Math.max(0, idx - 1)] }); return; }
+      if (key.downArrow) { setModal({ ...modal, selected: order[Math.min(order.length - 1, idx + 1)] }); return; }
+      if (key.return) { executeAction(modal.pending, modal.selected); return; }
+      if (key.escape) {
+        // Dismiss without action — still log it to diary as DISMISSED
+        executeAction(modal.pending, "DISMISSED");
+        return;
+      }
+      return;
+    }
     if (modal.kind !== "none") {
       if (key.escape || input === "q") { setModal({ kind: "none" }); return; }
       return;
@@ -398,7 +475,14 @@ function App() {
       }
       if (input === "?") {
         const next = whyQueue.current[0];
-        if (next) setModal({ kind: "why", pending: next });
+        if (next) {
+          // Default selection = recommended (lowest-creep action)
+          const scores = scoreActions(next.score);
+          const recommended = (Object.keys(scores) as Action[])
+            .filter((k) => k !== "DISMISSED")
+            .reduce((a, b) => scores[a] <= scores[b] ? a : b);
+          setModal({ kind: "action", pending: next, selected: recommended });
+        }
       }
       if (input === "s") runInitialScan(repos[selectedRepo]);
       if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); }
@@ -475,6 +559,26 @@ function App() {
           input={whyInput}
           onChange={setWhyInput}
           onSubmit={submitWhy}
+        />
+      );
+    }
+    if (modal.kind === "action") {
+      const scores = scoreActions(modal.pending.score);
+      const rec = (Object.keys(scores) as Action[])
+        .filter((k) => k !== "DISMISSED")
+        .reduce((a, b) => scores[a] <= scores[b] ? a : b);
+      return (
+        <ActionPicker
+          repoName={modal.pending.repo}
+          hash={modal.pending.hash}
+          subject={modal.pending.subject}
+          driftScore={modal.pending.score}
+          tier={modal.pending.tier}
+          verdict={modal.pending.verdict}
+          analysis={modal.pending.analysis}
+          actionScores={scores}
+          selected={modal.selected}
+          recommended={rec}
         />
       );
     }
