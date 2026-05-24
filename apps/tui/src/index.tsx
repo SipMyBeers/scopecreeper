@@ -1,4 +1,31 @@
 #!/usr/bin/env node
+// Subcommand routing — handle CLI cmds before pulling in Ink runtime.
+const cmd = process.argv[2];
+if (cmd === "precommit") {
+  const { runPrecommit } = await import("./cli/precommit.js");
+  process.exit(await runPrecommit());
+}
+if (cmd === "install-hook") {
+  const { installHook } = await import("./cli/install-hook.js");
+  process.exit(await installHook(process.argv[3]));
+}
+if (cmd === "help" || cmd === "--help" || cmd === "-h") {
+  console.log(`creeper — scope drift watcher
+
+  creeper                       launch the TUI (default)
+  creeper install-hook [path]   install a pre-commit drift check in the given repo
+  creeper precommit             run the drift check on staged changes (called by hook)
+  creeper help                  show this message
+
+Env vars:
+  SC_API_URL              override scopecreeper.ai base URL
+  SC_API_KEY              optional Pro API key
+  SC_DRIFT_THRESHOLD      score above which 'why?' fires (default 50)
+  SC_DISABLE=1            skip a single pre-commit check
+`);
+  process.exit(0);
+}
+
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { render, Box, Text, useInput, useApp } from "ink";
 import TextInput from "ink-text-input";
