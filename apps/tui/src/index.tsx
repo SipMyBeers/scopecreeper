@@ -10,10 +10,16 @@ import {
 import { watchRepo, unwatchAll } from "./watcher.js";
 import { scanText, scanCommit, askCreeper, generateKill, type Artifact } from "./api.js";
 import { useMouse, type MouseEvent } from "./useMouse.js";
+import {
+  appendJustification, loadJustifications, shouldPromptWhy,
+  type Justification,
+} from "./justifications.js";
 import RepoList, { type RepoHealth } from "./components/RepoList.js";
 import DriftFeed, { type DriftEvent } from "./components/DriftFeed.js";
 import ChatPane, { type ChatMessage } from "./components/ChatPane.js";
 import Modal from "./components/Modal.js";
+import WhyPrompt from "./components/WhyPrompt.js";
+import JustificationLog from "./components/JustificationLog.js";
 
 let eventCounter = 0;
 
@@ -23,7 +29,20 @@ type ModalState =
   | { kind: "none" }
   | { kind: "repo-detail"; repoPath: string }
   | { kind: "event-detail"; eventId: string }
-  | { kind: "kill"; repoPath: string; loading: boolean; artifact: Artifact | null };
+  | { kind: "kill"; repoPath: string; loading: boolean; artifact: Artifact | null }
+  | { kind: "why"; pending: PendingWhy }
+  | { kind: "log"; entries: Justification[]; filter?: string };
+
+interface PendingWhy {
+  repo: string;
+  path: string;
+  hash: string;
+  subject: string;
+  score: number;
+  tier: string;
+  verdict: string;
+  analysis: string;
+}
 
 const HISTORY_LIMIT = 16;
 function appendHistory(prev: number[] | undefined, score: number): number[] {
@@ -46,6 +65,8 @@ function App() {
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [addInput, setAddInput] = useState("");
   const [addError, setAddError] = useState("");
+  const [whyInput, setWhyInput] = useState("");
+  const whyQueue = useRef<PendingWhy[]>([]);
   const [activePanel, setActivePanel] = useState<Panel>(0);
   const [selectedRepo, setSelectedRepo] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState(0);
@@ -103,6 +124,17 @@ function App() {
         ? { ...e, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null, verdict: result?.verdict ?? null, analysis: result?.analysis ?? null }
         : e
       ));
+
+      // Drift threshold trip → queue a "Why?" prompt. Stacks if multiple commits drift in a row.
+      if (result && shouldPromptWhy(result.score)) {
+        const pending: PendingWhy = {
+          repo: repoName, path: repoPath, hash: commit.hash, subject: commit.subject,
+          score: result.score, tier: result.tier, verdict: result.verdict, analysis: result.analysis,
+        };
+        whyQueue.current.push(pending);
+        // Fire prompt only if nothing else is open (so we don't yank the user out of a Roast)
+        setModal((m) => m.kind === "none" ? { kind: "why", pending } : m);
+      }
       setHealth((prev) => {
         const next = new Map(prev);
         const base = { name: repoName, path: repoPath, score: null, tier: null, scanning: false, history: [] };
@@ -123,7 +155,7 @@ function App() {
   useEffect(() => {
     discoverRepos().then(async (found) => {
       setRepos(found);
-      setStatus(`${found.length} repo${found.length !== 1 ? "s" : ""} · click or arrows · enter detail · k roast · a add`);
+      setStatus(`${found.length} repo${found.length !== 1 ? "s" : ""} · enter detail · k roast · j log · drift fires WHY?`);
       const initHealth = new Map<string, RepoHealth>();
       for (const r of found) initHealth.set(r.path, { name: r.name, path: r.path, score: null, tier: null, scanning: false });
       setHealth(new Map(initHealth));
@@ -134,6 +166,34 @@ function App() {
       }));
     });
     return () => unwatchAll();
+  }, []);
+
+  const submitWhy = useCallback(async (val: string) => {
+    if (modal.kind !== "why") return;
+    const p = modal.pending;
+    await appendJustification({
+      repo: p.repo, path: p.path, hash: p.hash, subject: p.subject,
+      score: p.score, tier: p.tier, verdict: p.verdict,
+      justification: val.trim(),
+    });
+    setWhyInput("");
+    // Advance to next queued prompt or close
+    whyQueue.current = whyQueue.current.filter((q) => q.hash !== p.hash);
+    const nextPending = whyQueue.current[0];
+    if (nextPending) {
+      setModal({ kind: "why", pending: nextPending });
+    } else {
+      setModal({ kind: "none" });
+    }
+  }, [modal]);
+
+  const dismissWhy = useCallback(() => {
+    if (modal.kind === "why") submitWhy("");
+  }, [modal, submitWhy]);
+
+  const openLog = useCallback(async (filter?: string) => {
+    const entries = await loadJustifications();
+    setModal({ kind: "log", entries, filter });
   }, []);
 
   const runKill = useCallback(async (repoPath: string) => {
@@ -173,7 +233,11 @@ function App() {
   useInput((input, key) => {
     if (mode === "add-repo" || mode === "chat-input") return;
 
-    // Modal dismiss
+    // Modal dismiss (Why prompt has its own dismissal that logs an empty answer)
+    if (modal.kind === "why") {
+      if (key.escape) { dismissWhy(); return; }
+      return; // Let WhyPrompt handle enter via its TextInput
+    }
     if (modal.kind !== "none") {
       if (key.escape || input === "q") { setModal({ kind: "none" }); return; }
       return;
@@ -195,6 +259,11 @@ function App() {
         const r = repos[selectedRepo];
         if (r) runKill(r.path);
       }
+      if (input === "j") {
+        const r = repos[selectedRepo];
+        openLog(r?.name);
+      }
+      if (input === "J") openLog(); // capital J = all repos
       if (input === "s") runInitialScan(repos[selectedRepo]);
       if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); }
       if (input === "r") {
@@ -257,6 +326,25 @@ function App() {
   // Render modal content based on state
   const renderModal = () => {
     if (modal.kind === "none") return null;
+    if (modal.kind === "why") {
+      return (
+        <WhyPrompt
+          repoName={modal.pending.repo}
+          hash={modal.pending.hash}
+          subject={modal.pending.subject}
+          score={modal.pending.score}
+          tier={modal.pending.tier}
+          verdict={modal.pending.verdict}
+          analysis={modal.pending.analysis}
+          input={whyInput}
+          onChange={setWhyInput}
+          onSubmit={submitWhy}
+        />
+      );
+    }
+    if (modal.kind === "log") {
+      return <JustificationLog entries={modal.entries} filter={modal.filter} />;
+    }
     if (modal.kind === "kill") {
       return (
         <Modal
@@ -351,7 +439,7 @@ function App() {
       <Box paddingX={1}>
         <Text color="gray">
           {modal.kind !== "none" ? "esc/q close · click outside also closes"
-            : activePanel === 0 ? "↑↓ select · enter detail · k roast · s rescan · a add · r remove · → next"
+            : activePanel === 0 ? "↑↓ select · enter detail · k roast · j log · s rescan · a/r add/remove · → next"
             : activePanel === 1 ? "↑↓ scroll · enter detail · ← prev · → next"
             : (mode === "chat-input" ? "enter send · esc back" : "enter type · ← prev")}
         </Text>
