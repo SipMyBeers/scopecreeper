@@ -7,7 +7,18 @@ import {
   getRecentCommits, type TrackedRepo,
 } from "./discovery.js";
 import { watchRepo, unwatchAll } from "./watcher.js";
-import { scanText, askCreeper } from "./api.js";
+import { scanText, scanCommit, askCreeper } from "./api.js";
+import { spawnSync } from "child_process";
+
+function currentBranch(repoPath: string): string {
+  const r = spawnSync("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8", timeout: 2000 });
+  return (r.stdout ?? "").trim() || "HEAD";
+}
+
+const HISTORY_LIMIT = 16;
+function appendHistory(prev: number[] | undefined, score: number): number[] {
+  return [...(prev ?? []), score].slice(-HISTORY_LIMIT);
+}
 import RepoList, { type RepoHealth } from "./components/RepoList.js";
 import DriftFeed, { type DriftEvent } from "./components/DriftFeed.js";
 import ChatPane, { type ChatMessage } from "./components/ChatPane.js";
@@ -42,24 +53,28 @@ function App() {
 
   const runInitialScan = useCallback(async (repo: TrackedRepo) => {
     const scopeDoc = scopeDocs.current.get(repo.path) ?? "";
+    const branch = currentBranch(repo.path);
     setHealth((prev) => {
       const next = new Map(prev);
-      const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false };
-      next.set(repo.path, { ...(next.get(repo.path) ?? base), scanning: true });
+      const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false, history: [] };
+      next.set(repo.path, { ...(next.get(repo.path) ?? base), scanning: true, branch });
       return next;
     });
     const recent = getRecentCommits(repo.path, 5);
-    const payload = `Recent commits:\n${recent}\n\nScope:\n${scopeDoc.slice(0, 800)}`;
+    const payload = `Branch: ${branch}\n\nRecent commits:\n${recent}\n\nDeclared scope:\n${scopeDoc.slice(0, 1200)}`;
     const result = await scanText(payload, scopeDoc);
     setHealth((prev) => {
       const next = new Map(prev);
-      const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false };
+      const base = { name: repo.name, path: repo.path, score: null, tier: null, scanning: false, history: [] };
+      const existing = next.get(repo.path) ?? base;
       next.set(repo.path, {
-        ...(next.get(repo.path) ?? base),
+        ...existing,
         scanning: false,
         score: result?.score ?? null,
         tier: result?.tier ?? null,
         error: result === null,
+        branch,
+        history: result ? appendHistory(existing.history, result.score) : existing.history,
       });
       return next;
     });
@@ -82,16 +97,23 @@ function App() {
         next.set(repoPath, { ...h, scanning: true });
         return next;
       });
-      const payload = `Commit: ${commit.subject}\n\nFiles:\n${commit.diffStat}`;
-      const result = await scanText(payload, scopeDoc);
+      const result = await scanCommit(commit, scopeDoc);
       setEvents((prev) => prev.map((e) => e.id === id
         ? { ...e, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null, verdict: result?.verdict ?? null, analysis: result?.analysis ?? null }
         : e
       ));
       setHealth((prev) => {
         const next = new Map(prev);
-        const h = next.get(repoPath) ?? { name: repoName, path: repoPath, score: null, tier: null, scanning: false };
-        next.set(repoPath, { ...h, scanning: false, score: result?.score ?? null, tier: result?.tier ?? null });
+        const base = { name: repoName, path: repoPath, score: null, tier: null, scanning: false, history: [] };
+        const h = next.get(repoPath) ?? base;
+        next.set(repoPath, {
+          ...h,
+          scanning: false,
+          score: result?.score ?? null,
+          tier: result?.tier ?? null,
+          branch: commit.branch,
+          history: result ? appendHistory(h.history, result.score) : h.history,
+        });
         return next;
       });
     });

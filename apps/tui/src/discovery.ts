@@ -116,6 +116,10 @@ export interface CommitInfo {
   subject: string;
   author: string;
   diffStat: string;
+  /** Top N changed file diffs, hunks included, truncated. Real evidence
+   *  for the LLM to cite ("apps/web/billing/page.tsx +47 lines"). */
+  diffHunks: string;
+  branch: string;
 }
 
 export function getLatestCommit(repoPath: string): CommitInfo | null {
@@ -123,7 +127,25 @@ export function getLatestCommit(repoPath: string): CommitInfo | null {
   if (!log) return null;
   const [hash, subject, author] = log.split("|||");
   const diffStat = run("git", ["-C", repoPath, "show", "--stat", "--format=", "HEAD"]).slice(0, 600);
-  return { hash: (hash ?? "").slice(0, 8), subject: subject ?? "", author: author ?? "", diffStat };
+  const branch = run("git", ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"]) || "HEAD";
+
+  // Get the actual diff hunks, but capped to keep LLM payload manageable.
+  // Strip lock/build artifacts that drown out the signal.
+  const fullDiff = run("git", [
+    "-C", repoPath, "show", "HEAD", "--format=",
+    "--", ".", ":(exclude)*.lock", ":(exclude)pnpm-lock.yaml",
+    ":(exclude)package-lock.json", ":(exclude)dist/*", ":(exclude)*.min.*",
+  ]);
+  const diffHunks = fullDiff.slice(0, 3000);
+
+  return {
+    hash: (hash ?? "").slice(0, 8),
+    subject: subject ?? "",
+    author: author ?? "",
+    diffStat,
+    diffHunks,
+    branch,
+  };
 }
 
 export function getRecentCommits(repoPath: string, n = 5): string {
