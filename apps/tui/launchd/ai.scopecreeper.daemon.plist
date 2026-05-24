@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Launch agent for the scope-creeper daemon.
+
+  Install:
+    cp ai.scopecreeper.daemon.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/ai.scopecreeper.daemon.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/ai.scopecreeper.daemon.plist
+    rm ~/Library/LaunchAgents/ai.scopecreeper.daemon.plist
+
+  Logs:
+    tail -f ~/.config/scopecreeper/daemon.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.scopecreeper.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Cap V8 heap at 96 MB so the daemon can never balloon past ~120 MB total -->
+        <string>/usr/bin/env</string>
+        <string>node</string>
+        <string>--max-old-space-size=96</string>
+        <!-- Replace this path with `which creeper` if you installed differently -->
+        <string>/opt/homebrew/bin/creeper</string>
+        <string>daemon</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Restart at most once every 60s if it crashes (avoid restart loop) -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+
+    <!-- Throttled hard restart once a day at 4am — defeats any slow leak -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/beers/.config/scopecreeper/daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/beers/.config/scopecreeper/daemon.err.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <!-- Override API endpoint here if needed -->
+        <!-- <key>SC_API_URL</key><string>https://your-deploy.pages.dev</string> -->
+        <key>SC_NOTIFY_THRESHOLD</key>
+        <string>60</string>
+    </dict>
+</dict>
+</plist>

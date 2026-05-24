@@ -6,6 +6,18 @@ import { spawn } from "child_process";
 
 const recent: Map<string, number> = new Map();
 const THROTTLE_MS = 5 * 60 * 1000;
+const MAX_KEYS = 200;
+
+// Purge keys older than 1 hour every 10 minutes so the Map can't grow unbounded.
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [k, ts] of recent) if (ts < cutoff) recent.delete(k);
+  // Hard cap as a backstop
+  if (recent.size > MAX_KEYS) {
+    const sorted = [...recent.entries()].sort((a, b) => a[1] - b[1]);
+    for (let i = 0; i < sorted.length - MAX_KEYS; i++) recent.delete(sorted[i][0]);
+  }
+}, 10 * 60 * 1000).unref();
 
 interface Opts {
   title: string;

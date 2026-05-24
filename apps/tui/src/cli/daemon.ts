@@ -156,6 +156,13 @@ export async function runDaemon(): Promise<number> {
   log(`drift notify threshold: ${DRIFT_NOTIFY_THRESHOLD}/100`);
   log(`state file: ${STATE_PATH}`);
 
+  // Periodic memory log so we can spot leaks. RSS in MB.
+  setInterval(() => {
+    const rss = process.memoryUsage.rss();
+    const mb = (rss / 1024 / 1024).toFixed(1);
+    if (rss > 200 * 1024 * 1024) log(`⚠ memory: ${mb} MB rss — investigate`);
+  }, 30 * 60 * 1000).unref();
+
   const state = await readState();
   const repos = await discoverRepos();
   log(`discovered ${repos.length} repos with .scopecreeper.md`);
