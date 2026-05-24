@@ -41,12 +41,17 @@ import {
   appendJustification, loadJustifications, shouldPromptWhy,
   type Justification,
 } from "./justifications.js";
+import {
+  findActiveSession, readSessionEvents, pathDrifts, type CcEvent,
+} from "./cc-session.js";
+import { tailSession } from "./cc-watcher.js";
 import RepoList, { type RepoHealth } from "./components/RepoList.js";
 import DriftFeed, { type DriftEvent } from "./components/DriftFeed.js";
 import ChatPane, { type ChatMessage } from "./components/ChatPane.js";
 import Modal from "./components/Modal.js";
 import WhyPrompt from "./components/WhyPrompt.js";
 import JustificationLog from "./components/JustificationLog.js";
+import SessionWatch from "./components/SessionWatch.js";
 
 let eventCounter = 0;
 
@@ -58,7 +63,17 @@ type ModalState =
   | { kind: "event-detail"; eventId: string }
   | { kind: "kill"; repoPath: string; loading: boolean; artifact: Artifact | null }
   | { kind: "why"; pending: PendingWhy }
-  | { kind: "log"; entries: Justification[]; filter?: string };
+  | { kind: "log"; entries: Justification[]; filter?: string }
+  | {
+      kind: "session-watch";
+      repoPath: string;
+      repoName: string;
+      sessionId: string;
+      jsonlPath: string;
+      events: CcEvent[];
+      driftPaths: Set<string>;
+      startedAt: number | null;
+    };
 
 interface PendingWhy {
   repo: string;
@@ -94,6 +109,8 @@ function App() {
   const [addError, setAddError] = useState("");
   const [whyInput, setWhyInput] = useState("");
   const whyQueue = useRef<PendingWhy[]>([]);
+  const sessionStopRef = useRef<(() => void) | null>(null);
+  const [liveTick, setLiveTick] = useState(0);
   const [activePanel, setActivePanel] = useState<Panel>(0);
   const [selectedRepo, setSelectedRepo] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState(0);
@@ -218,6 +235,61 @@ function App() {
     if (modal.kind === "why") submitWhy("");
   }, [modal, submitWhy]);
 
+  const watchClaudeCode = useCallback(async (repoPath: string) => {
+    const repo = repos.find((r) => r.path === repoPath);
+    if (!repo) return;
+    const session = findActiveSession(repoPath);
+    if (!session) {
+      setModal({
+        kind: "session-watch", repoPath, repoName: repo.name, sessionId: "no-session",
+        jsonlPath: "", events: [
+          { kind: "meta", ts: Date.now(), text: "no Claude Code session found for this repo" } as CcEvent,
+        ], driftPaths: new Set(), startedAt: null,
+      });
+      return;
+    }
+    const scopeDoc = scopeDocs.current.get(repoPath) ?? "";
+    const initial = await readSessionEvents(session.jsonlPath, 80);
+    const driftPaths = new Set<string>();
+    for (const e of initial) {
+      if (e.kind === "tool-use" && e.filePath && pathDrifts(e.filePath, scopeDoc)) {
+        driftPaths.add(e.filePath);
+      }
+    }
+    setModal({
+      kind: "session-watch", repoPath, repoName: repo.name, sessionId: session.sessionId,
+      jsonlPath: session.jsonlPath, events: initial, driftPaths, startedAt: session.mtime,
+    });
+    // Tail the file for new events
+    sessionStopRef.current = await tailSession(session.jsonlPath, session.sizeBytes, (newEvents) => {
+      setModal((m) => {
+        if (m.kind !== "session-watch" || m.jsonlPath !== session.jsonlPath) return m;
+        const drifts = new Set(m.driftPaths);
+        for (const e of newEvents) {
+          if (e.kind === "tool-use" && e.filePath && pathDrifts(e.filePath, scopeDoc)) {
+            drifts.add(e.filePath);
+          }
+        }
+        return { ...m, events: [...m.events, ...newEvents], driftPaths: drifts };
+      });
+    });
+  }, [repos]);
+
+  // Live tick for "started Xs ago" relative-time refresh in the session modal
+  useEffect(() => {
+    if (modal.kind !== "session-watch") return;
+    const id = setInterval(() => setLiveTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, [modal.kind]);
+
+  // Stop the tail when the modal closes
+  useEffect(() => {
+    if (modal.kind !== "session-watch" && sessionStopRef.current) {
+      sessionStopRef.current();
+      sessionStopRef.current = null;
+    }
+  }, [modal.kind]);
+
   const openLog = useCallback(async (filter?: string) => {
     const entries = await loadJustifications();
     setModal({ kind: "log", entries, filter });
@@ -291,6 +363,10 @@ function App() {
         openLog(r?.name);
       }
       if (input === "J") openLog(); // capital J = all repos
+      if (input === "w") {
+        const r = repos[selectedRepo];
+        if (r) watchClaudeCode(r.path);
+      }
       if (input === "s") runInitialScan(repos[selectedRepo]);
       if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); }
       if (input === "r") {
@@ -371,6 +447,19 @@ function App() {
     }
     if (modal.kind === "log") {
       return <JustificationLog entries={modal.entries} filter={modal.filter} />;
+    }
+    if (modal.kind === "session-watch") {
+      return (
+        <SessionWatch
+          repoName={modal.repoName}
+          sessionId={modal.sessionId}
+          jsonlPath={modal.jsonlPath}
+          events={modal.events}
+          driftPaths={modal.driftPaths}
+          startedAt={modal.startedAt}
+          liveTick={liveTick}
+        />
+      );
     }
     if (modal.kind === "kill") {
       return (
@@ -466,7 +555,7 @@ function App() {
       <Box paddingX={1}>
         <Text color="gray">
           {modal.kind !== "none" ? "esc/q close · click outside also closes"
-            : activePanel === 0 ? "↑↓ select · enter detail · k roast · j log · s rescan · a/r add/remove · → next"
+            : activePanel === 0 ? "↑↓ · enter detail · k roast · w watch-cc · j log · s rescan · a/r add/rm · →"
             : activePanel === 1 ? "↑↓ scroll · enter detail · ← prev · → next"
             : (mode === "chat-input" ? "enter send · esc back" : "enter type · ← prev")}
         </Text>
