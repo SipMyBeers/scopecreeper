@@ -9,10 +9,15 @@ if (cmd === "install-hook") {
   const { installHook } = await import("./cli/install-hook.js");
   process.exit(await installHook(process.argv[3]));
 }
+if (cmd === "init") {
+  const { runInit } = await import("./cli/init.js");
+  process.exit(await runInit(process.argv[3]));
+}
 if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   console.log(`creeper — scope drift watcher
 
   creeper                       launch the TUI (default)
+  creeper init [path]           generate a draft .scopecreeper.md from README + git log
   creeper install-hook [path]   install a pre-commit drift check in the given repo
   creeper precommit             run the drift check on staged changes (called by hook)
   creeper help                  show this message
