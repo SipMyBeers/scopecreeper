@@ -67,6 +67,41 @@ export async function scanText(text: string, _scopeDoc?: string): Promise<ScanRe
   }
 }
 
+export interface Artifact {
+  kind: "KILL" | "SHIPPABLE" | "ISSUE" | "BADGE";
+  title: string;
+  body: string;
+}
+
+/**
+ * Generate a KILL artifact for a repo — a brutal one-page autopsy arguing
+ * the project should be abandoned. Free-tier eligible (viral loop).
+ */
+export async function generateKill(repoName: string, scopeDoc: string, recentCommits: string): Promise<Artifact | null> {
+  try {
+    const parentSummary = `Project: ${repoName}\n\nDeclared scope:\n${scopeDoc.slice(0, 1500)}\n\nRecent commits:\n${recentCommits.slice(0, 800)}`;
+    const res = await fetch(`${BASE}/api/creep`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        artifactKind: "KILL",
+        parentSummary,
+        dimension: {
+          id: "live_project",
+          label: repoName.toUpperCase().slice(0, 24),
+          blurb: `Currently-active project: ${repoName}`,
+        },
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { artifact?: Artifact };
+    return data.artifact ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function askCreeper(question: string, context: string): Promise<string> {
   try {
     const payload = `${question}\n\nContext:\n${context}`.slice(0, 4000);
