@@ -18,6 +18,7 @@ import { join } from "path";
 import { createInterface } from "readline";
 import { scanCommit } from "../api.js";
 import { appendJustification, shouldPromptWhy } from "../justifications.js";
+import { notify } from "../notify.js";
 
 function run(cmd: string, args: string[]): string {
   const r = spawnSync(cmd, args, { encoding: "utf8", timeout: 5000 });
@@ -89,28 +90,42 @@ export async function runPrecommit(): Promise<number> {
     return 0;
   }
 
+  // Always log the drift so it shows up in TUI + later review
+  const repoName = gitRoot.split("/").pop() ?? "?";
+  await appendJustification({
+    repo: repoName, path: gitRoot, hash: "STAGED", subject: "(staged changes)",
+    score: result.score, tier: result.tier, verdict: result.verdict,
+    justification: "", // unanswered — gets resolved later in the TUI if user wants
+  });
+
+  // Ambient mode (default): notify and move on. No prompts, no block.
+  if (process.env.SC_BLOCKING !== "1") {
+    notify({
+      title: `🌀 drift · ${repoName}`,
+      subtitle: `${result.score}/100  ${result.tier.toUpperCase()}`,
+      message: result.verdict,
+      key: `precommit::${repoName}::${result.tier}`,
+    });
+    process.stdout.write(dim(`[scope-creeper] drift logged + notified. proceeding (set SC_BLOCKING=1 to force WHY? prompt).\n`));
+    return 0;
+  }
+
+  // Opt-in blocking mode for users who want hard friction at commit
   process.stdout.write("\n");
   process.stdout.write(pink("▸ DRIFT DETECTED · explain yourself\n"));
   process.stdout.write("Why does this commit need to exist?\n");
   process.stdout.write(dim("(type an answer to log + proceed, blank enter to dismiss, ctrl+c to abort commit)\n"));
-
   const answer = await readFromTty();
-
-  await appendJustification({
-    repo: gitRoot.split("/").pop() ?? "?",
-    path: gitRoot,
-    hash: "STAGED",
-    subject: "(staged changes)",
-    score: result.score,
-    tier: result.tier,
-    verdict: result.verdict,
-    justification: answer.trim(),
-  });
-
   if (answer.trim()) {
+    // Overwrite the empty justification we just wrote with the real answer
+    await appendJustification({
+      repo: repoName, path: gitRoot, hash: "STAGED-WHY", subject: "(answered why)",
+      score: result.score, tier: result.tier, verdict: result.verdict,
+      justification: answer.trim(),
+    });
     process.stdout.write(dim("[scope-creeper] logged. proceeding.\n"));
   } else {
-    process.stdout.write(dim("[scope-creeper] dismissed. logged as a dismissal — those count too.\n"));
+    process.stdout.write(dim("[scope-creeper] dismissed. proceeding.\n"));
   }
   return 0;
 }

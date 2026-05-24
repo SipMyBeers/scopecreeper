@@ -13,6 +13,10 @@ if (cmd === "init") {
   const { runInit } = await import("./cli/init.js");
   process.exit(await runInit(process.argv[3]));
 }
+if (cmd === "daemon") {
+  const { runDaemon } = await import("./cli/daemon.js");
+  process.exit(await runDaemon());
+}
 if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   console.log(`creeper — scope drift watcher
 
@@ -20,12 +24,15 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   creeper init [path]           generate a draft .scopecreeper.md from README + git log
   creeper install-hook [path]   install a pre-commit drift check in the given repo
   creeper precommit             run the drift check on staged changes (called by hook)
+  creeper daemon                background watcher — ambient notifications, no blocking
   creeper help                  show this message
 
 Env vars:
   SC_API_URL              override scopecreeper.ai base URL
   SC_API_KEY              optional Pro API key
-  SC_DRIFT_THRESHOLD      score above which 'why?' fires (default 50)
+  SC_DRIFT_THRESHOLD      score above which a drift is logged (default 50)
+  SC_NOTIFY_THRESHOLD     score above which daemon notifies you (default 60)
+  SC_BLOCKING=1           opt into the strict WHY? prompt at commit time
   SC_DISABLE=1            skip a single pre-commit check
 `);
   process.exit(0);
@@ -174,15 +181,14 @@ function App() {
         : e
       ));
 
-      // Drift threshold trip → queue a "Why?" prompt. Stacks if multiple commits drift in a row.
+      // Drift detected → queue silently. Ambient mode: do NOT auto-open the modal,
+      // user opens it when they choose (press `?` to drain the queue).
       if (result && shouldPromptWhy(result.score)) {
         const pending: PendingWhy = {
           repo: repoName, path: repoPath, hash: commit.hash, subject: commit.subject,
           score: result.score, tier: result.tier, verdict: result.verdict, analysis: result.analysis,
         };
         whyQueue.current.push(pending);
-        // Fire prompt only if nothing else is open (so we don't yank the user out of a Roast)
-        setModal((m) => m.kind === "none" ? { kind: "why", pending } : m);
       }
       setHealth((prev) => {
         const next = new Map(prev);
@@ -204,7 +210,7 @@ function App() {
   useEffect(() => {
     discoverRepos().then(async (found) => {
       setRepos(found);
-      setStatus(`${found.length} repo${found.length !== 1 ? "s" : ""} · enter detail · k roast · j log · drift fires WHY?`);
+      setStatus(`${found.length} repo${found.length !== 1 ? "s" : ""} · ambient mode · enter detail · k roast · w watch-cc · ? pending drifts`);
       const initHealth = new Map<string, RepoHealth>();
       for (const r of found) initHealth.set(r.path, { name: r.name, path: r.path, score: null, tier: null, scanning: false });
       setHealth(new Map(initHealth));
@@ -371,6 +377,10 @@ function App() {
       if (input === "w") {
         const r = repos[selectedRepo];
         if (r) watchClaudeCode(r.path);
+      }
+      if (input === "?") {
+        const next = whyQueue.current[0];
+        if (next) setModal({ kind: "why", pending: next });
       }
       if (input === "s") runInitialScan(repos[selectedRepo]);
       if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); }
@@ -560,7 +570,7 @@ function App() {
       <Box paddingX={1}>
         <Text color="gray">
           {modal.kind !== "none" ? "esc/q close · click outside also closes"
-            : activePanel === 0 ? "↑↓ · enter detail · k roast · w watch-cc · j log · s rescan · a/r add/rm · →"
+            : activePanel === 0 ? "↑↓ · enter · k roast · w watch-cc · ? pending · j log · s rescan · a/r · →"
             : activePanel === 1 ? "↑↓ scroll · enter detail · ← prev · → next"
             : (mode === "chat-input" ? "enter send · esc back" : "enter type · ← prev")}
         </Text>
