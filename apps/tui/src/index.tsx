@@ -14,6 +14,24 @@ if (cmd === "init") {
   process.exit(await runInit(process.argv[3]));
 }
 if (cmd === "daemon") {
+  // Prefer the native Rust binary (~10 MB RSS) if present on PATH or in
+  // the workspace; fall back to the Node implementation otherwise.
+  const { spawnSync, spawn } = await import("child_process");
+  const { existsSync } = await import("fs");
+  const candidates = [
+    "/Users/beers/scopecreeper/apps/daemon-rs/target/release/creeperd",
+    "/opt/homebrew/bin/creeperd",
+    "/usr/local/bin/creeperd",
+  ];
+  const onPath = spawnSync("which", ["creeperd"]).stdout?.toString().trim();
+  if (onPath) candidates.unshift(onPath);
+  const nativeBin = candidates.find((p) => p && existsSync(p));
+  if (nativeBin) {
+    console.log(`[creeper] using native daemon: ${nativeBin}`);
+    const child = spawn(nativeBin, [], { stdio: "inherit" });
+    child.on("exit", (code) => process.exit(code ?? 0));
+    await new Promise(() => {}); // keep this process alive while child runs
+  }
   const { runDaemon } = await import("./cli/daemon.js");
   process.exit(await runDaemon());
 }

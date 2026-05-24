@@ -21,13 +21,10 @@
 
     <key>ProgramArguments</key>
     <array>
-        <!-- Cap V8 heap at 96 MB so the daemon can never balloon past ~120 MB total -->
-        <string>/usr/bin/env</string>
-        <string>node</string>
-        <string>--max-old-space-size=96</string>
-        <!-- Replace this path with `which creeper` if you installed differently -->
-        <string>/opt/homebrew/bin/creeper</string>
-        <string>daemon</string>
+        <!-- Native Rust binary — ~10 MB RSS, no Node runtime needed.
+             Build with: cd apps/daemon-rs && cargo build --release
+             Then symlink or copy to /opt/homebrew/bin/creeperd. -->
+        <string>/opt/homebrew/bin/creeperd</string>
     </array>
 
     <key>RunAtLoad</key>
