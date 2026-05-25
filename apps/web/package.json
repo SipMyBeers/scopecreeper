@@ -4,19 +4,24 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/build-og-root.mjs",
     "build": "next build --webpack",
+    "prepages:build": "node scripts/build-og-root.mjs",
     "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:deploy": "pnpm run pages:build && wrangler pages deploy .vercel/output",
+    "pages:deploy": "pnpm run pages:build && wrangler pages deploy .vercel/output/static --commit-dirty=true",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",
+    "pdfjs-dist": "^5.7.284",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "satori": "^0.26.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
