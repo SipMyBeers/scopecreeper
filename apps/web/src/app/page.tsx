@@ -1,5 +1,7 @@
-import Hero from "@/components/Hero";
+import BecomeLanding from "@/components/BecomeLanding";
+
+export const runtime = "edge";
 
 export default function Page() {
-  return <Hero />;
+  return <BecomeLanding />;
 }
