@@ -70,7 +70,7 @@ import {
   getRecentCommits, type TrackedRepo,
 } from "./discovery.js";
 import { watchRepo, unwatchAll } from "./watcher.js";
-import { scanText, scanCommit, askCreeper, generateKill, explainActions, type Artifact, type ActionExplanations } from "./api.js";
+import { scanText, scanCommit, askCreeper, generateKill, explainActions, generateExpandCounter, type Artifact, type ActionExplanations } from "./api.js";
 import { useMouse, type MouseEvent } from "./useMouse.js";
 import {
   appendJustification, loadJustifications, shouldPromptWhy,
@@ -88,6 +88,7 @@ import WhyPrompt from "./components/WhyPrompt.js";
 import JustificationLog from "./components/JustificationLog.js";
 import SessionWatch from "./components/SessionWatch.js";
 import ActionPicker from "./components/ActionPicker.js";
+import ExpandConfirm from "./components/ExpandConfirm.js";
 import PatternsPanel from "./components/PatternsPanel.js";
 import { analyzePatterns, type Finding } from "./patterns.js";
 import { computeEscalation, type AcceptEscalation } from "./escalation.js";
@@ -106,6 +107,7 @@ type ModalState =
   | { kind: "kill"; repoPath: string; loading: boolean; artifact: Artifact | null }
   | { kind: "why"; pending: PendingWhy }
   | { kind: "action"; pending: PendingWhy; selected: Action; escalation: AcceptEscalation }
+  | { kind: "expand-confirm"; pending: PendingWhy; counter: string | null; selected: "back" | "confirm" }
   | { kind: "log"; entries: Justification[]; filter?: string }
   | { kind: "patterns"; findings: Finding[]; windowDays: number }
   | {
@@ -310,12 +312,21 @@ function App() {
       copyToClipboard(prompt);
       note = "redirect prompt copied to clipboard — paste into Claude";
     } else if (action === "EXPAND") {
-      try {
-        const added = await expandScope(pending.path, pending.subject);
-        note = `appended to scope doc: ${added}`;
-      } catch (e) {
-        note = `expand failed: ${e instanceof Error ? e.message : "?"}`;
-      }
+      // Route through confirm-with-counter-argument modal. Do NOT log diary
+      // yet — the real EXPAND only runs after user confirms past-you's
+      // counter-argument.
+      setModal({ kind: "expand-confirm", pending, counter: null, selected: "back" });
+      const scopeDoc = scopeDocs.current.get(pending.path) ?? "";
+      generateExpandCounter({
+        driftSubject: pending.subject,
+        scopeDoc,
+        diffHunks: pending.analysis || pending.subject,
+      }).then((c) => {
+        setModal((m) => m.kind === "expand-confirm" && m.pending.hash === pending.hash
+          ? { ...m, counter: c }
+          : m);
+      });
+      return; // bail; confirmExpand will finish the work
     } else if (action === "KILL") {
       // Trigger the existing KILL flow — leaves the action picker open
       // for a beat so the user sees the choice landed, then the kill
@@ -351,6 +362,43 @@ function App() {
       }
     }
   }, [openActionPicker]);
+
+  const confirmExpand = useCallback(async () => {
+    if (modal.kind !== "expand-confirm") return;
+    const pending = modal.pending;
+    const scores = scoreActions(pending.score);
+    let note = "";
+    try {
+      const added = await expandScope(pending.path, pending.subject);
+      note = `appended to scope doc: ${added}`;
+    } catch (e) {
+      note = `expand failed: ${e instanceof Error ? e.message : "?"}`;
+    }
+    await appendDiary(pending.path, pending.repo, {
+      ts: new Date(), hash: pending.hash, subject: pending.subject,
+      driftScore: pending.score, tier: pending.tier,
+      verdict: pending.verdict, analysis: pending.analysis,
+      chosen: "EXPAND", chosenScore: scores.EXPAND,
+      note: note + (modal.counter ? ` · past-you objected: "${modal.counter.slice(0, 120)}…"` : ""),
+    });
+    await appendJustification({
+      repo: pending.repo, path: pending.path, hash: pending.hash,
+      subject: pending.subject, score: pending.score, tier: pending.tier,
+      verdict: pending.verdict, justification: `EXPAND: ${note}`,
+    });
+    whyQueue.current = whyQueue.current.filter((q) => q.hash !== pending.hash);
+    const next = whyQueue.current[0];
+    if (next) {
+      openActionPicker(next);
+    } else {
+      setModal({ kind: "none" });
+    }
+  }, [modal, openActionPicker]);
+
+  const backFromExpand = useCallback(() => {
+    if (modal.kind !== "expand-confirm") return;
+    openActionPicker(modal.pending);
+  }, [modal, openActionPicker]);
 
   const submitWhy = useCallback(async (val: string) => {
     if (modal.kind !== "why") return;
@@ -506,6 +554,17 @@ function App() {
       }
       return;
     }
+    if (modal.kind === "expand-confirm") {
+      if (key.leftArrow) { setModal({ ...modal, selected: "back" }); return; }
+      if (key.rightArrow) { setModal({ ...modal, selected: "confirm" }); return; }
+      if (key.return) {
+        if (modal.selected === "confirm") confirmExpand();
+        else backFromExpand();
+        return;
+      }
+      if (key.escape) { backFromExpand(); return; }
+      return;
+    }
     if (modal.kind !== "none") {
       if (key.escape || input === "q") { setModal({ kind: "none" }); return; }
       return;
@@ -653,6 +712,18 @@ function App() {
     }
     if (modal.kind === "patterns") {
       return <PatternsPanel findings={modal.findings} windowDays={modal.windowDays} />;
+    }
+    if (modal.kind === "expand-confirm") {
+      return (
+        <ExpandConfirm
+          repoName={modal.pending.repo}
+          hash={modal.pending.hash}
+          subject={modal.pending.subject}
+          driftScore={modal.pending.score}
+          counter={modal.counter}
+          selected={modal.selected}
+        />
+      );
     }
     if (modal.kind === "session-watch") {
       return (

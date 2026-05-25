@@ -171,6 +171,54 @@ export async function explainActions(args: {
   }
 }
 
+/**
+ * Generate a counter-argument before legitimizing drift via EXPAND.
+ * The LLM is given the scope doc and the new commit and asked to argue
+ * — in past-you's voice — why this expansion contradicts what was
+ * declared. User reads the counter, then confirms or backs out.
+ */
+export async function generateExpandCounter(args: {
+  driftSubject: string;
+  scopeDoc: string;
+  diffHunks: string;
+}): Promise<string | null> {
+  const prompt = [
+    `You are PAST-YOU, the person who wrote the .scopecreeper.md below. PRESENT-YOU is about to legitimize a drift by adding it to the scope doc, which means past-you is being overruled. Write a short, direct counter-argument from past-you's perspective.`,
+    ``,
+    `Rules:`,
+    `- 3-5 sentences max. No preamble.`,
+    `- Quote specific lines from the scope doc verbatim.`,
+    `- Reference the specific file/feature being added.`,
+    `- Ask one pointed question.`,
+    `- Do not be polite. You're arguing with yourself.`,
+    ``,
+    `DECLARED SCOPE (this is what past-you wrote):`,
+    args.scopeDoc.slice(0, 2000),
+    ``,
+    `WHAT PRESENT-YOU IS ADDING:`,
+    `Commit: ${args.driftSubject}`,
+    `Diff: ${args.diffHunks.slice(0, 1200)}`,
+    ``,
+    `Write past-you's counter-argument:`,
+  ].join("\n");
+
+  try {
+    const res = await fetch(`${BASE}/api/score`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ kind: "chatlog", payload: prompt.slice(0, 6000) }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as Record<string, unknown>;
+    const analysis = String(data.analysis ?? "").trim();
+    if (!analysis) return null;
+    return analysis.slice(0, 800);
+  } catch {
+    return null;
+  }
+}
+
 export async function askCreeper(question: string, context: string): Promise<string> {
   try {
     const payload = `${question}\n\nContext:\n${context}`.slice(0, 4000);
