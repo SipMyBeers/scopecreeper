@@ -65,7 +65,7 @@ import {
   getRecentCommits, type TrackedRepo,
 } from "./discovery.js";
 import { watchRepo, unwatchAll } from "./watcher.js";
-import { scanText, scanCommit, askCreeper, generateKill, type Artifact } from "./api.js";
+import { scanText, scanCommit, askCreeper, generateKill, explainActions, type Artifact, type ActionExplanations } from "./api.js";
 import { useMouse, type MouseEvent } from "./useMouse.js";
 import {
   appendJustification, loadJustifications, shouldPromptWhy,
@@ -146,6 +146,9 @@ function App() {
   const whyQueue = useRef<PendingWhy[]>([]);
   const sessionStopRef = useRef<(() => void) | null>(null);
   const [liveTick, setLiveTick] = useState(0);
+  // Cache of LLM-generated per-route explanations, keyed by commit hash so
+  // re-opening the same drift doesn't burn another API call.
+  const [explanationsByHash, setExplanationsByHash] = useState<Map<string, ActionExplanations>>(new Map());
   const [activePanel, setActivePanel] = useState<Panel>(0);
   const [selectedRepo, setSelectedRepo] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState(0);
@@ -246,6 +249,36 @@ function App() {
     return () => unwatchAll();
   }, []);
 
+  const openActionPicker = useCallback((pending: PendingWhy) => {
+    const scores = scoreActions(pending.score);
+    const recommended = (Object.keys(scores) as Action[])
+      .filter((k) => k !== "DISMISSED")
+      .reduce((a, b) => scores[a] <= scores[b] ? a : b);
+    setModal({ kind: "action", pending, selected: recommended });
+
+    // Kick off explanation fetch if not cached
+    if (!explanationsByHash.has(pending.hash)) {
+      const scopeDoc = scopeDocs.current.get(pending.path) ?? "";
+      // We need diff hunks — fall back to analysis text since the queued
+      // PendingWhy doesn't carry the diff. Good enough for the LLM to reason about.
+      explainActions({
+        driftSubject: pending.subject,
+        driftScore: pending.score,
+        driftVerdict: pending.verdict,
+        diffHunks: pending.analysis || pending.subject,
+        scopeDoc,
+      }).then((expl) => {
+        if (expl) {
+          setExplanationsByHash((prev) => {
+            const next = new Map(prev);
+            next.set(pending.hash, expl);
+            return next;
+          });
+        }
+      });
+    }
+  }, [explanationsByHash]);
+
   const executeAction = useCallback(async (pending: PendingWhy, action: Action) => {
     const scores = scoreActions(pending.score);
     const scopeDoc = scopeDocs.current.get(pending.path) ?? "";
@@ -294,16 +327,12 @@ function App() {
     if (action !== "KILL") {
       const next = whyQueue.current[0];
       if (next) {
-        const nextScores = scoreActions(next.score);
-        const rec = (Object.keys(nextScores) as Action[])
-          .filter((k) => k !== "DISMISSED")
-          .reduce((a, b) => nextScores[a] <= nextScores[b] ? a : b);
-        setModal({ kind: "action", pending: next, selected: rec });
+        openActionPicker(next);
       } else {
         setModal({ kind: "none" });
       }
     }
-  }, []);
+  }, [openActionPicker]);
 
   const submitWhy = useCallback(async (val: string) => {
     if (modal.kind !== "why") return;
@@ -476,12 +505,7 @@ function App() {
       if (input === "?") {
         const next = whyQueue.current[0];
         if (next) {
-          // Default selection = recommended (lowest-creep action)
-          const scores = scoreActions(next.score);
-          const recommended = (Object.keys(scores) as Action[])
-            .filter((k) => k !== "DISMISSED")
-            .reduce((a, b) => scores[a] <= scores[b] ? a : b);
-          setModal({ kind: "action", pending: next, selected: recommended });
+          openActionPicker(next);
         }
       }
       if (input === "s") runInitialScan(repos[selectedRepo]);
@@ -579,6 +603,7 @@ function App() {
           actionScores={scores}
           selected={modal.selected}
           recommended={rec}
+          explanations={explanationsByHash.get(modal.pending.hash) ?? null}
         />
       );
     }

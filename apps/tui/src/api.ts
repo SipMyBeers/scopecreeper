@@ -102,6 +102,75 @@ export async function generateKill(repoName: string, scopeDoc: string, recentCom
   }
 }
 
+export interface ActionExplanations {
+  REDIRECT: string;
+  EXPAND: string;
+  KILL: string;
+  ACCEPT: string;
+}
+
+/**
+ * Defend the score of every route in the action picker with EVIDENCE
+ * from the scope doc + diff. Returns one short sentence per route.
+ *
+ * Returns null on failure; caller should fall back to static hints.
+ */
+export async function explainActions(args: {
+  driftSubject: string;
+  driftScore: number;
+  driftVerdict: string;
+  diffHunks: string;
+  scopeDoc: string;
+}): Promise<ActionExplanations | null> {
+  const prompt = [
+    `You are SCOPE CREEPER reviewing a drifty commit. Write a 1-sentence justification for each of the 4 user actions, grounded in SPECIFIC evidence from the scope doc or diff. Cite file paths or scope-doc lines verbatim where possible.`,
+    ``,
+    `DRIFT CONTEXT:`,
+    `Commit: ${args.driftSubject}`,
+    `Score: ${args.driftScore}/100`,
+    `Verdict: ${args.driftVerdict}`,
+    ``,
+    `DIFF:`,
+    args.diffHunks.slice(0, 1800),
+    ``,
+    `DECLARED PROJECT SCOPE:`,
+    args.scopeDoc.slice(0, 1500),
+    ``,
+    `Return JSON ONLY (no markdown, no prose wrapping):`,
+    `{`,
+    `  "REDIRECT": "1-sentence reason to revert and refocus — cite the specific scope-doc line this commit violates",`,
+    `  "EXPAND": "1-sentence consequence of legitimizing this drift — what does growing scope here mean for the next month",`,
+    `  "KILL": "1-sentence framing of what gets killed and what's recovered — be brutally direct",`,
+    `  "ACCEPT": "1-sentence risk of keeping this commit as-is with no scope change — the silent debt being taken on"`,
+    `}`,
+  ].join("\n");
+
+  try {
+    const res = await fetch(`${BASE}/api/score`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ kind: "chatlog", payload: prompt.slice(0, 6000) }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as Record<string, unknown>;
+    const analysis = String(data.analysis ?? "");
+    // The LLM returns JSON inside the analysis field. Extract it.
+    const match = analysis.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]) as Partial<ActionExplanations>;
+    if (!parsed.REDIRECT || !parsed.EXPAND || !parsed.KILL || !parsed.ACCEPT) return null;
+    return {
+      REDIRECT: String(parsed.REDIRECT).slice(0, 240),
+      EXPAND: String(parsed.EXPAND).slice(0, 240),
+      KILL: String(parsed.KILL).slice(0, 240),
+      ACCEPT: String(parsed.ACCEPT).slice(0, 240),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function askCreeper(question: string, context: string): Promise<string> {
   try {
     const payload = `${question}\n\nContext:\n${context}`.slice(0, 4000);

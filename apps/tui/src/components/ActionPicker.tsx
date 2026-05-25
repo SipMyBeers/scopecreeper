@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { Action } from "../diary.js";
+import type { ActionExplanations } from "../api.js";
 
 interface Props {
   repoName: string;
@@ -13,6 +14,8 @@ interface Props {
   actionScores: Record<Action, number>;
   selected: Action;
   recommended: Action;
+  /** Per-route LLM-generated explanation. null = still loading. */
+  explanations: ActionExplanations | null;
 }
 
 const ACTIONS: { key: Action; label: string; hint: string }[] = [
@@ -36,7 +39,7 @@ function scoreBar(score: number): string {
 
 export default function ActionPicker(props: Props) {
   const { repoName, hash, subject, driftScore, tier, verdict, analysis,
-          actionScores, selected, recommended } = props;
+          actionScores, selected, recommended, explanations } = props;
 
   return (
     <Box flexDirection="column" borderStyle="double" borderColor="#ff007f"
@@ -56,6 +59,7 @@ export default function ActionPicker(props: Props) {
         const score = actionScores[a.key];
         const isSel = a.key === selected;
         const isRec = a.key === recommended;
+        const why = explanations ? explanations[a.key as keyof ActionExplanations] : undefined;
         return (
           <Box key={a.key} flexDirection="column" marginBottom={1}>
             <Box gap={1}>
@@ -66,11 +70,23 @@ export default function ActionPicker(props: Props) {
               {isRec && <Text color="cyanBright">★ recommended</Text>}
             </Box>
             <Text color="gray">{"   "}{a.hint}</Text>
+            {why ? (
+              <Text color={isRec ? "cyanBright" : "white"} wrap="wrap">
+                {"   why: "}{why}
+              </Text>
+            ) : (
+              <Text color="gray" dimColor>{"   ⟳ analyzing route against your scope doc..."}</Text>
+            )}
           </Box>
         );
       })}
 
-      <Text color="gray" dimColor>↑↓ select · enter confirm · esc dismiss</Text>
+      {!explanations && (
+        <Text color="gray" dimColor>analysis loading — picker is usable now, ↑↓ select · enter confirm · esc dismiss</Text>
+      )}
+      {explanations && (
+        <Text color="gray" dimColor>↑↓ select · enter confirm · esc dismiss</Text>
+      )}
     </Box>
   );
 }
