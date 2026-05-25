@@ -94,9 +94,9 @@ function Terminal({ children, accent = GREEN, title }: { children: ReactNode; ac
   );
 }
 
-function SectionTag({ children, color }: { children: ReactNode; color: string }) {
+function SectionTag({ children, color, id }: { children: ReactNode; color: string; id?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 44, marginBottom: 14 }}>
+    <div id={id} style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 44, marginBottom: 14, scrollMarginTop: 24 }}>
       <div
         style={{
           width: 6,
@@ -429,7 +429,7 @@ export default function BecomeLanding() {
           </Terminal>
 
           {/* the loop */}
-          <SectionTag color={GREEN}>The loop, in five moves</SectionTag>
+          <SectionTag color={GREEN} id="loop">The loop, in five moves</SectionTag>
           <Terminal accent={GREEN} title="the system">
             <TokLine tokens={[
               { c: PINK, t: "  1.  " }, { c: GREEN, t: "daemon", bold: true },
@@ -528,7 +528,7 @@ export default function BecomeLanding() {
           </Terminal>
 
           {/* install */}
-          <SectionTag color={GREEN}>Install in 60 seconds</SectionTag>
+          <SectionTag color={GREEN} id="install">Install in 60 seconds</SectionTag>
           <Terminal accent={GREEN} title="zsh · localhost">
             <TokLine tokens={[{ c: DIM, t: "# 1. install the cli" }]} />
             <TokLine tokens={[{ c: AMBER, t: "$ " }, { c: GREEN, t: "npm install -g " }, { c: PINK, t: "@scopecreeper/tui" }]} />
