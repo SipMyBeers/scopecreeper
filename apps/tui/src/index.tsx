@@ -13,6 +13,10 @@ if (cmd === "init") {
   const { runInit } = await import("./cli/init.js");
   process.exit(await runInit(process.argv[3]));
 }
+if (cmd === "patterns") {
+  const { runPatterns } = await import("./cli/patterns.js");
+  process.exit(await runPatterns(process.argv.slice(3)));
+}
 if (cmd === "daemon") {
   // Prefer the native Rust binary (~10 MB RSS) if present on PATH or in
   // the workspace; fall back to the Node implementation otherwise.
@@ -43,6 +47,7 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   creeper install-hook [path]   install a pre-commit drift check in the given repo
   creeper precommit             run the drift check on staged changes (called by hook)
   creeper daemon                background watcher — ambient notifications, no blocking
+  creeper patterns [--window=N] real-talk report — pattern surveillance over last N days
   creeper help                  show this message
 
 Env vars:
@@ -83,6 +88,8 @@ import WhyPrompt from "./components/WhyPrompt.js";
 import JustificationLog from "./components/JustificationLog.js";
 import SessionWatch from "./components/SessionWatch.js";
 import ActionPicker from "./components/ActionPicker.js";
+import PatternsPanel from "./components/PatternsPanel.js";
+import { analyzePatterns, type Finding } from "./patterns.js";
 import { appendDiary, scoreActions, type Action } from "./diary.js";
 import { copyToClipboard, buildRedirectPrompt } from "./clipboard.js";
 import { expandScope } from "./expand-scope.js";
@@ -99,6 +106,7 @@ type ModalState =
   | { kind: "why"; pending: PendingWhy }
   | { kind: "action"; pending: PendingWhy; selected: Action }
   | { kind: "log"; entries: Justification[]; filter?: string }
+  | { kind: "patterns"; findings: Finding[]; windowDays: number }
   | {
       kind: "session-watch";
       repoPath: string;
@@ -508,6 +516,12 @@ function App() {
           openActionPicker(next);
         }
       }
+      if (input === "p" || input === "P") {
+        const windowDays = 30;
+        analyzePatterns({ windowDays }).then((findings) => {
+          setModal({ kind: "patterns", findings, windowDays });
+        });
+      }
       if (input === "s") runInitialScan(repos[selectedRepo]);
       if (input === "a") { setMode("add-repo"); setAddInput(""); setAddError(""); }
       if (input === "r") {
@@ -609,6 +623,9 @@ function App() {
     }
     if (modal.kind === "log") {
       return <JustificationLog entries={modal.entries} filter={modal.filter} />;
+    }
+    if (modal.kind === "patterns") {
+      return <PatternsPanel findings={modal.findings} windowDays={modal.windowDays} />;
     }
     if (modal.kind === "session-watch") {
       return (
@@ -717,7 +734,7 @@ function App() {
       <Box paddingX={1}>
         <Text color="gray">
           {modal.kind !== "none" ? "esc/q close · click outside also closes"
-            : activePanel === 0 ? "↑↓ · enter · k roast · w watch-cc · ? pending · j log · s rescan · a/r · →"
+            : activePanel === 0 ? "↑↓ · enter · k roast · w watch-cc · ? pending · p patterns · j log · s rescan · a/r · →"
             : activePanel === 1 ? "↑↓ scroll · enter detail · ← prev · → next"
             : (mode === "chat-input" ? "enter send · esc back" : "enter type · ← prev")}
         </Text>

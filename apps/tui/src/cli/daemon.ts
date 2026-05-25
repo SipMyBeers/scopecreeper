@@ -22,6 +22,7 @@ import { watchRepo } from "../watcher.js";
 import { scanCommit } from "../api.js";
 import { notify } from "../notify.js";
 import { appendJustification } from "../justifications.js";
+import { analyzePatterns } from "../patterns.js";
 
 const HOME = process.env.HOME ?? "";
 const STATE_PATH = join(HOME, ".config", "scopecreeper", "daemon-state.json");
@@ -38,6 +39,8 @@ interface RepoState {
 interface DaemonState {
   perRepo: Record<string, RepoState>;
   lastDigestDay: string; // YYYY-MM-DD
+  /** ISO week string of the last weekly pattern notification (e.g. "2026-W21"). */
+  lastWeeklyPatternsWeek?: string;
 }
 
 async function readState(): Promise<DaemonState> {
@@ -151,6 +154,49 @@ async function maybeDigest(state: DaemonState, repos: TrackedRepo[]): Promise<vo
   await writeState(state);
 }
 
+/**
+ * Once a week (Sunday after 9am), run pattern surveillance over the
+ * last 30d of justifications and surface the top finding as a
+ * notification. The full report stays in `creeper patterns`.
+ */
+async function maybeWeeklyPatterns(state: DaemonState): Promise<void> {
+  const now = new Date();
+  if (now.getDay() !== 0) return; // Sunday only
+  if (now.getHours() < 9) return;
+  const weekKey = isoWeek(now);
+  if (state.lastWeeklyPatternsWeek === weekKey) return;
+
+  const findings = await analyzePatterns({ windowDays: 30 });
+  if (!findings.length) {
+    state.lastWeeklyPatternsWeek = weekKey;
+    await writeState(state);
+    return;
+  }
+  const top = findings[0];
+  notify({
+    title: "🌀 real talk · weekly patterns",
+    subtitle: `${findings.length} pattern${findings.length === 1 ? "" : "s"} surfaced`,
+    message: top.headline + "  ·  run `creeper patterns` for the full report",
+    key: `weekly-patterns::${weekKey}`,
+  });
+  log(`weekly patterns sent for ${weekKey} (${findings.length} findings)`);
+  state.lastWeeklyPatternsWeek = weekKey;
+  await writeState(state);
+}
+
+function isoWeek(d: Date): string {
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay() + 7) % 7));
+  }
+  const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
+
 export async function runDaemon(): Promise<number> {
   log(`creeper daemon starting (pid ${process.pid})`);
   log(`drift notify threshold: ${DRIFT_NOTIFY_THRESHOLD}/100`);
@@ -177,7 +223,9 @@ export async function runDaemon(): Promise<number> {
 
   // Daily digest check every 5 minutes
   setInterval(() => { maybeDigest(state, repos).catch((e) => log(`digest err: ${e}`)); }, 5 * 60 * 1000);
+  setInterval(() => { maybeWeeklyPatterns(state).catch((e) => log(`patterns err: ${e}`)); }, 15 * 60 * 1000);
   await maybeDigest(state, repos);
+  await maybeWeeklyPatterns(state);
 
   notify({
     title: "🌀 scope creeper online",
