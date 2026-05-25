@@ -90,6 +90,7 @@ import SessionWatch from "./components/SessionWatch.js";
 import ActionPicker from "./components/ActionPicker.js";
 import PatternsPanel from "./components/PatternsPanel.js";
 import { analyzePatterns, type Finding } from "./patterns.js";
+import { computeEscalation, type AcceptEscalation } from "./escalation.js";
 import { appendDiary, scoreActions, type Action } from "./diary.js";
 import { copyToClipboard, buildRedirectPrompt } from "./clipboard.js";
 import { expandScope } from "./expand-scope.js";
@@ -104,7 +105,7 @@ type ModalState =
   | { kind: "event-detail"; eventId: string }
   | { kind: "kill"; repoPath: string; loading: boolean; artifact: Artifact | null }
   | { kind: "why"; pending: PendingWhy }
-  | { kind: "action"; pending: PendingWhy; selected: Action }
+  | { kind: "action"; pending: PendingWhy; selected: Action; escalation: AcceptEscalation }
   | { kind: "log"; entries: Justification[]; filter?: string }
   | { kind: "patterns"; findings: Finding[]; windowDays: number }
   | {
@@ -257,18 +258,20 @@ function App() {
     return () => unwatchAll();
   }, []);
 
-  const openActionPicker = useCallback((pending: PendingWhy) => {
+  const openActionPicker = useCallback(async (pending: PendingWhy) => {
     const scores = scoreActions(pending.score);
     const recommended = (Object.keys(scores) as Action[])
       .filter((k) => k !== "DISMISSED")
       .reduce((a, b) => scores[a] <= scores[b] ? a : b);
-    setModal({ kind: "action", pending, selected: recommended });
+
+    // Compute escalation against the justification log
+    const entries = await loadJustifications();
+    const escalation = computeEscalation(entries, pending.repo, pending.subject);
+    setModal({ kind: "action", pending, selected: recommended, escalation });
 
     // Kick off explanation fetch if not cached
     if (!explanationsByHash.has(pending.hash)) {
       const scopeDoc = scopeDocs.current.get(pending.path) ?? "";
-      // We need diff hunks — fall back to analysis text since the queued
-      // PendingWhy doesn't carry the diff. Good enough for the LLM to reason about.
       explainActions({
         driftSubject: pending.subject,
         driftScore: pending.score,
@@ -288,6 +291,13 @@ function App() {
   }, [explanationsByHash]);
 
   const executeAction = useCallback(async (pending: PendingWhy, action: Action) => {
+    // Escalating ACCEPT friction — if you keep accepting drifts on the same
+    // area, the tool stops rubber-stamping and demands you defend the choice.
+    if (action === "ACCEPT" && modal.kind === "action" && modal.escalation.level >= 1) {
+      setModal({ kind: "why", pending });
+      return;
+    }
+
     const scores = scoreActions(pending.score);
     const scopeDoc = scopeDocs.current.get(pending.path) ?? "";
     let note = "";
@@ -345,21 +355,37 @@ function App() {
   const submitWhy = useCallback(async (val: string) => {
     if (modal.kind !== "why") return;
     const p = modal.pending;
+    const reason = val.trim();
+    // If this WhyPrompt was opened from an escalated ACCEPT, log as
+    // "ACCEPT: <reason>" so the next escalation calc counts it correctly
+    // AND so the diary entry stays consistent with the action picker's
+    // ACCEPT path.
+    const isEscalatedAccept = reason.length > 0;
+    const justification = isEscalatedAccept ? `ACCEPT: ${reason}` : "";
     await appendJustification({
       repo: p.repo, path: p.path, hash: p.hash, subject: p.subject,
       score: p.score, tier: p.tier, verdict: p.verdict,
-      justification: val.trim(),
+      justification,
+    });
+    await appendDiary(p.path, p.repo, {
+      ts: new Date(), hash: p.hash, subject: p.subject,
+      driftScore: p.score, tier: p.tier, verdict: p.verdict,
+      analysis: p.analysis,
+      chosen: isEscalatedAccept ? "ACCEPT" : "DISMISSED",
+      chosenScore: p.score,
+      note: reason || "dismissed without answering",
     });
     setWhyInput("");
     // Advance to next queued prompt or close
     whyQueue.current = whyQueue.current.filter((q) => q.hash !== p.hash);
     const nextPending = whyQueue.current[0];
     if (nextPending) {
-      setModal({ kind: "why", pending: nextPending });
+      // Re-open via the picker so escalation re-computes for the next drift
+      openActionPicker(nextPending);
     } else {
       setModal({ kind: "none" });
     }
-  }, [modal]);
+  }, [modal, openActionPicker]);
 
   const dismissWhy = useCallback(() => {
     if (modal.kind === "why") submitWhy("");
@@ -618,6 +644,7 @@ function App() {
           selected={modal.selected}
           recommended={rec}
           explanations={explanationsByHash.get(modal.pending.hash) ?? null}
+          escalation={modal.escalation}
         />
       );
     }

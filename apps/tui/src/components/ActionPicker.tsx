@@ -2,6 +2,8 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { Action } from "../diary.js";
 import type { ActionExplanations } from "../api.js";
+import type { AcceptEscalation } from "../escalation.js";
+import { escalationHint } from "../escalation.js";
 
 interface Props {
   repoName: string;
@@ -16,6 +18,8 @@ interface Props {
   recommended: Action;
   /** Per-route LLM-generated explanation. null = still loading. */
   explanations: ActionExplanations | null;
+  /** Escalation state for the ACCEPT route. */
+  escalation: AcceptEscalation;
 }
 
 const ACTIONS: { key: Action; label: string; hint: string }[] = [
@@ -39,7 +43,7 @@ function scoreBar(score: number): string {
 
 export default function ActionPicker(props: Props) {
   const { repoName, hash, subject, driftScore, tier, verdict, analysis,
-          actionScores, selected, recommended, explanations } = props;
+          actionScores, selected, recommended, explanations, escalation } = props;
 
   return (
     <Box flexDirection="column" borderStyle="double" borderColor="#ff007f"
@@ -60,6 +64,7 @@ export default function ActionPicker(props: Props) {
         const isSel = a.key === selected;
         const isRec = a.key === recommended;
         const why = explanations ? explanations[a.key as keyof ActionExplanations] : undefined;
+        const escHint = a.key === "ACCEPT" ? escalationHint(escalation) : "";
         return (
           <Box key={a.key} flexDirection="column" marginBottom={1}>
             <Box gap={1}>
@@ -68,8 +73,19 @@ export default function ActionPicker(props: Props) {
               </Text>
               <Text color={scoreColor(score)}>{scoreBar(score)} {score}/100</Text>
               {isRec && <Text color="cyanBright">★ recommended</Text>}
+              {a.key === "ACCEPT" && escalation.level === 1 && (
+                <Text color="yellowBright">⚠ reason required</Text>
+              )}
+              {a.key === "ACCEPT" && escalation.level === 2 && (
+                <Text color="redBright">⚠ full justification required</Text>
+              )}
             </Box>
             <Text color="gray">{"   "}{a.hint}</Text>
+            {escHint && (
+              <Text color={escalation.level === 2 ? "redBright" : "yellowBright"} wrap="wrap">
+                {"   ↑ "}{escHint}
+              </Text>
+            )}
             {why ? (
               <Text color={isRec ? "cyanBright" : "white"} wrap="wrap">
                 {"   why: "}{why}
