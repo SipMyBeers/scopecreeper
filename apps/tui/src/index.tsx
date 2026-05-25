@@ -17,6 +17,10 @@ if (cmd === "patterns") {
   const { runPatterns } = await import("./cli/patterns.js");
   process.exit(await runPatterns(process.argv.slice(3)));
 }
+if (cmd === "inbox") {
+  const { runInbox } = await import("./cli/inbox.js");
+  process.exit(await runInbox(process.argv.slice(3)));
+}
 if (cmd === "daemon") {
   // Prefer the native Rust binary (~10 MB RSS) if present on PATH or in
   // the workspace; fall back to the Node implementation otherwise.
@@ -48,6 +52,7 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   creeper precommit             run the drift check on staged changes (called by hook)
   creeper daemon                background watcher — ambient notifications, no blocking
   creeper patterns [--window=N] real-talk report — pattern surveillance over last N days
+  creeper inbox [--drain|--json] view (or drain) the shared drift inbox AI sessions can read
   creeper help                  show this message
 
 Env vars:

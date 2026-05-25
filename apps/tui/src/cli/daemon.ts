@@ -23,6 +23,7 @@ import { scanCommit } from "../api.js";
 import { notify } from "../notify.js";
 import { appendJustification } from "../justifications.js";
 import { analyzePatterns } from "../patterns.js";
+import { appendEvent } from "../inbox.js";
 
 const HOME = process.env.HOME ?? "";
 const STATE_PATH = join(HOME, ".config", "scopecreeper", "daemon-state.json");
@@ -112,6 +113,17 @@ async function attachWatchers(repos: TrackedRepo[], state: DaemonState): Promise
         });
         repoState.lastNotifyAt = Date.now();
         log(`  → notified (${reasons.join(", ")})`);
+        // Write to shared inbox so AI sessions can read it via the MCP
+        // or directly via ~/.config/scopecreeper/inbox.md.
+        try {
+          await appendEvent({
+            ts: Date.now(),
+            repo: repo.name, path: repoPath, hash: commit.hash,
+            subject: commit.subject, score: result.score, tier: result.tier,
+            verdict: result.verdict, analysis: result.analysis,
+            reasons,
+          });
+        } catch (e) { log(`  ⚠ inbox write failed: ${e}`); }
       }
 
       // Always log for TUI / future review

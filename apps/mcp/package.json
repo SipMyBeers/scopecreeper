@@ -1,0 +1,44 @@
+{
+  "name": "@scopecreeper/mcp",
+  "version": "0.2.0",
+  "description": "Scope Creeper MCP server — exposes scan / kill / shippable tools to Claude Code and any MCP client.",
+  "type": "module",
+  "bin": {
+    "scopecreeper-mcp": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -w -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "scope-creeper",
+    "delusion-score",
+    "ai-planning"
+  ],
+  "license": "MIT",
+  "author": "Beers Labs LLC",
+  "homepage": "https://scopecreeper.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SipMyBeers/scopecreeper.git",
+    "directory": "apps/mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  }
+}
