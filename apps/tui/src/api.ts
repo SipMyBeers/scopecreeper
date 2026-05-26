@@ -146,17 +146,21 @@ export async function explainActions(args: {
   ].join("\n");
 
   try {
-    const res = await fetch(`${BASE}/api/score`, {
+    const res = await fetch(`${BASE}/api/llm`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ kind: "chatlog", payload: prompt.slice(0, 6000) }),
+      body: JSON.stringify({
+        prompt: prompt.slice(0, 8000),
+        system: "You are SCOPE CREEPER. You evaluate code drift against a declared scope. Return ONLY the requested JSON. No prose wrapping. No markdown fences.",
+        maxTokens: 800,
+        jsonObject: true,
+      }),
       signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) return null;
-    const data = await res.json() as Record<string, unknown>;
-    const analysis = String(data.analysis ?? "");
-    // The LLM returns JSON inside the analysis field. Extract it.
-    const match = analysis.match(/\{[\s\S]*\}/);
+    const data = await res.json() as { text?: string };
+    const raw = (data.text ?? "").trim();
+    const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return null;
     const parsed = JSON.parse(match[0]) as Partial<ActionExplanations>;
     if (!parsed.REDIRECT || !parsed.EXPAND || !parsed.KILL || !parsed.ACCEPT) return null;
@@ -203,17 +207,21 @@ export async function generateExpandCounter(args: {
   ].join("\n");
 
   try {
-    const res = await fetch(`${BASE}/api/score`, {
+    const res = await fetch(`${BASE}/api/llm`, {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify({ kind: "chatlog", payload: prompt.slice(0, 6000) }),
+      body: JSON.stringify({
+        prompt: prompt.slice(0, 8000),
+        system: "You are PAST-YOU, the developer who originally wrote a project's .scopecreeper.md. PRESENT-YOU is trying to legitimize a drift. Your job: write a blunt counter-argument quoting the scope doc verbatim. 3-5 sentences. No preamble.",
+        maxTokens: 600,
+      }),
       signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) return null;
-    const data = await res.json() as Record<string, unknown>;
-    const analysis = String(data.analysis ?? "").trim();
-    if (!analysis) return null;
-    return analysis.slice(0, 800);
+    const data = await res.json() as { text?: string };
+    const text = (data.text ?? "").trim();
+    if (!text) return null;
+    return text.slice(0, 800);
   } catch {
     return null;
   }

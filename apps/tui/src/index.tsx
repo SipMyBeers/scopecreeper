@@ -21,6 +21,14 @@ if (cmd === "inbox") {
   const { runInbox } = await import("./cli/inbox.js");
   process.exit(await runInbox(process.argv.slice(3)));
 }
+if (cmd === "hook") {
+  const { runHook } = await import("./cli/hook.js");
+  process.exit(await runHook());
+}
+if (cmd === "edit-check") {
+  const { runEditCheck } = await import("./cli/edit-check.js");
+  process.exit(await runEditCheck(process.argv.slice(3)));
+}
 if (cmd === "daemon") {
   // Prefer the native Rust binary (~10 MB RSS) if present on PATH or in
   // the workspace; fall back to the Node implementation otherwise.
@@ -53,6 +61,8 @@ if (cmd === "help" || cmd === "--help" || cmd === "-h") {
   creeper daemon                background watcher — ambient notifications, no blocking
   creeper patterns [--window=N] real-talk report — pattern surveillance over last N days
   creeper inbox [--drain|--json] view (or drain) the shared drift inbox AI sessions can read
+  creeper hook                  silent-when-empty wrapper for UserPromptSubmit hooks
+  creeper edit-check <path>     instant heuristic drift check on a single file (PostToolUse hook)
   creeper help                  show this message
 
 Env vars:

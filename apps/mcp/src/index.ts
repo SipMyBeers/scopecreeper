@@ -39,6 +39,146 @@ const HOME = process.env.HOME ?? "";
 const INBOX_JSONL = join(HOME, ".config", "scopecreeper", "inbox.jsonl");
 const INBOX_ARCHIVE = join(HOME, ".config", "scopecreeper", "inbox-archive.jsonl");
 
+interface Justification {
+  ts: number;
+  repo: string;
+  path: string;
+  hash: string;
+  subject: string;
+  score: number;
+  tier: string;
+  verdict: string;
+  justification: string;
+}
+
+const JUSTIFICATIONS = join(HOME, ".config", "scopecreeper", "justifications.json");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+async function readJustifications(): Promise<Justification[]> {
+  try {
+    const raw = await readFile(JUSTIFICATIONS, "utf8");
+    const parsed = JSON.parse(raw) as { entries?: Justification[] };
+    return parsed.entries ?? [];
+  } catch { return []; }
+}
+
+async function readScopeBundle(repoPath: string): Promise<{ scope: string; diary: string }> {
+  let scope = "";
+  let diary = "";
+  try { scope = await readFile(join(repoPath, ".scopecreeper.md"), "utf8"); } catch { /* no scope */ }
+  try { diary = await readFile(join(repoPath, ".scopecreeper-diary.md"), "utf8"); } catch { /* no diary */ }
+  return { scope, diary };
+}
+
+interface PatternFinding {
+  severity: "high" | "warn" | "info";
+  headline: string;
+  evidence: string[];
+  suggestion: string;
+  repos: string[];
+}
+
+function actionOf(e: Justification): string {
+  const m = (e.justification ?? "").match(/^([A-Z]+):/);
+  return m ? m[1] : "";
+}
+
+function isDismissal(e: Justification): boolean {
+  const j = (e.justification ?? "").trim();
+  return j === "" || j === "DISMISSED:" || j.startsWith("DISMISSED:");
+}
+
+function extractFileHints(subject: string): string[] {
+  const out: string[] = [];
+  const pathLike = subject.match(/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_./*-]+/g) ?? [];
+  out.push(...pathLike.map((p) => p.slice(0, 80)));
+  if (!pathLike.length) {
+    const featureWords = subject.toLowerCase().match(/\b(billing|auth|dashboard|admin|api|payments?|referral|onboarding|notifications?|settings?|profile|search|mobile|chat|messaging|analytics)\b/g) ?? [];
+    out.push(...new Set(featureWords));
+  }
+  return out;
+}
+
+function analyzePatterns(entries: Justification[], windowDays: number): PatternFinding[] {
+  const cutoff = Date.now() - windowDays * DAY_MS;
+  const recent = entries.filter((e) => e.ts >= cutoff);
+  if (!recent.length) return [];
+
+  const findings: PatternFinding[] = [];
+  const expandByRepo = new Map<string, { count: number; files: Set<string> }>();
+  const dismissByRepo = new Map<string, { count: number; files: Set<string> }>();
+  const redirectByRepo = new Map<string, { count: number; files: Set<string> }>();
+
+  for (const e of recent) {
+    const action = actionOf(e);
+    if (action === "EXPAND") {
+      const b = expandByRepo.get(e.repo) ?? { count: 0, files: new Set() };
+      b.count++;
+      extractFileHints(e.subject).forEach((f) => b.files.add(f));
+      expandByRepo.set(e.repo, b);
+    } else if (isDismissal(e)) {
+      const b = dismissByRepo.get(e.repo) ?? { count: 0, files: new Set() };
+      b.count++;
+      extractFileHints(e.subject).forEach((f) => b.files.add(f));
+      dismissByRepo.set(e.repo, b);
+    } else if (action === "REDIRECT") {
+      const b = redirectByRepo.get(e.repo) ?? { count: 0, files: new Set() };
+      b.count++;
+      extractFileHints(e.subject).forEach((f) => b.files.add(f));
+      redirectByRepo.set(e.repo, b);
+    }
+  }
+
+  for (const [repo, b] of expandByRepo) {
+    if (b.count < 3) continue;
+    findings.push({
+      severity: b.count >= 6 ? "high" : "warn",
+      headline: `${b.count} EXPAND decisions on ${repo} in ${windowDays}d — silent scope inflation`,
+      evidence: b.files.size ? [`recurring areas: ${[...b.files].slice(0, 4).join(", ")}`] : [],
+      suggestion: "Either commit to the area as first-class scope, or stop expanding into it.",
+      repos: [repo],
+    });
+  }
+  for (const [repo, b] of dismissByRepo) {
+    if (b.count < 4) continue;
+    findings.push({
+      severity: "high",
+      headline: `${b.count} dismissed drifts on ${repo} in ${windowDays}d — avoidance`,
+      evidence: b.files.size ? [`clustered at: ${[...b.files].slice(0, 4).join(", ")}`] : [],
+      suggestion: "Open the picker on the next drift in this repo and actually pick a route.",
+      repos: [repo],
+    });
+  }
+  for (const [repo, b] of redirectByRepo) {
+    if (b.count < 4) continue;
+    findings.push({
+      severity: "warn",
+      headline: `${b.count} REDIRECTs on ${repo} — AI keeps trying to drag you somewhere`,
+      evidence: b.files.size ? [`recurring direction: ${[...b.files].slice(0, 3).join(", ")}`] : [],
+      suggestion: "Re-read the scope doc. The drift you keep blocking is the drift Claude reads from the code.",
+      repos: [repo],
+    });
+  }
+
+  const hotRepos = new Set<string>();
+  const lastWeek = recent.filter((e) => e.ts >= Date.now() - 7 * DAY_MS);
+  for (const e of lastWeek) if (e.score >= 71) hotRepos.add(e.repo);
+  if (hotRepos.size >= 3) {
+    findings.push({
+      severity: "high",
+      headline: `${hotRepos.size} repos in ABYSS this week`,
+      evidence: [...hotRepos].slice(0, 6).map((r) => `· ${r}`),
+      suggestion: "Pick one and shut down work on the rest until it's back in sweetspot.",
+      repos: [...hotRepos],
+    });
+  }
+
+  return findings.sort((a, b) => {
+    const w = { high: 3, warn: 2, info: 1 };
+    return w[b.severity] - w[a.severity];
+  });
+}
+
 async function readInbox(drainAfter: boolean): Promise<{ events: InboxEvent[] }> {
   let raw: string;
   try {
@@ -196,6 +336,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "scope_creeper_history",
+      description:
+        "Query the user's full Scope Creeper decision history (~/.config/scopecreeper/justifications.json). Returns past drift events the user (or daemon) has logged, optionally filtered by repo, area, or recency. Use this when the user asks 'have we seen this before?', 'what did I decide on billing last week?', or when you want to check whether something you're about to suggest has already been rejected. Searches the local filesystem; no network.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          repo: { type: "string", description: "Filter to a single repo name (e.g. 'scopecreeper')." },
+          area: { type: "string", description: "Substring match against commit subjects (e.g. 'billing', 'auth')." },
+          sinceDays: { type: "number", description: "Only include entries from the last N days. Default 90." },
+          limit: { type: "number", description: "Max entries to return. Default 30." },
+        },
+      },
+    },
+    {
+      name: "scope_creeper_scope",
+      description:
+        "Read a project's declared scope (.scopecreeper.md) and decision diary (.scopecreeper-diary.md) from the local filesystem. Returns both files concatenated so you can ground recommendations in what the user has explicitly said the project IS / is NOT / is deferring, plus a chronological log of past drift decisions. Use BEFORE proposing significant changes to confirm the work fits scope and the user hasn't already rejected the direction.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          repoPath: { type: "string", description: "Absolute path to the repo root. Required." },
+        },
+        required: ["repoPath"],
+      },
+    },
+    {
+      name: "scope_creeper_patterns",
+      description:
+        "Run pattern surveillance over the last N days of the user's decision history. Returns behavioral patterns the commit-by-commit view can't see: repeated EXPAND on same area (silent scope inflation), repeated DISMISSED on same area (avoidance), portfolio-wide drift heat (too many repos in ABYSS at once), repeated REDIRECT on same area (AI keeps trying to drag user somewhere). Each finding has a severity, evidence, and a single suggested next move. Use when the user asks 'what am I avoiding?' or when starting a strategy/planning conversation.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          windowDays: { type: "number", description: "Trailing window. Default 30." },
+        },
+      },
+    },
+    {
       name: "scope_creeper_shippable",
       description:
         "Generate a SHIPPABLE_V0 artifact — a 1-page PRD with a concrete stack, V0 scope (3-5 bullets), acceptance criteria, and 4-6 paste-runnable shell commands for the first 30 minutes of work. Use when a plan has survived the KILL test and you want to start building. Pro tier ($9/mo).",
@@ -284,6 +461,76 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       if (e.analysis) lines.push(`- analysis: ${e.analysis}`);
       if (e.reasons?.length) lines.push(`- reasons: ${e.reasons.join(", ")}`);
       lines.push(`- repo path: \`${e.path}\``);
+      lines.push("");
+    }
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+
+  if (name === "scope_creeper_history") {
+    const a = args as { repo?: string; area?: string; sinceDays?: number; limit?: number };
+    const sinceDays = typeof a.sinceDays === "number" ? a.sinceDays : 90;
+    const cutoff = Date.now() - sinceDays * DAY_MS;
+    const limit = typeof a.limit === "number" ? Math.max(1, Math.min(200, a.limit)) : 30;
+    const all = await readJustifications();
+    const filtered = all
+      .filter((e) => e.ts >= cutoff)
+      .filter((e) => !a.repo || e.repo === a.repo)
+      .filter((e) => !a.area || (e.subject + " " + e.justification).toLowerCase().includes(a.area.toLowerCase()))
+      .sort((x, y) => y.ts - x.ts)
+      .slice(0, limit);
+    if (!filtered.length) {
+      return { content: [{ type: "text", text: `no decision-history entries in the last ${sinceDays}d matching {repo:${a.repo ?? "*"}, area:${a.area ?? "*"}}.` }] };
+    }
+    const lines = [`${filtered.length} entries (sinceDays=${sinceDays}${a.repo ? `, repo=${a.repo}` : ""}${a.area ? `, area=${a.area}` : ""}):`, ""];
+    for (const e of filtered) {
+      const when = new Date(e.ts).toISOString().slice(0, 16).replace("T", " ");
+      const action = actionOf(e) || (isDismissal(e) ? "DISMISSED" : "—");
+      lines.push(`- [${when}] ${e.repo} · ${e.score}/100 ${e.tier.toUpperCase()} · ${action}`);
+      lines.push(`    commit: ${e.subject}`);
+      if (e.justification && action !== "DISMISSED") lines.push(`    note: ${e.justification}`);
+    }
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+
+  if (name === "scope_creeper_scope") {
+    const repoPath = String((args as { repoPath?: string }).repoPath ?? "").trim();
+    if (!repoPath) {
+      return { isError: true, content: [{ type: "text", text: "missing 'repoPath'" }] };
+    }
+    const { scope, diary } = await readScopeBundle(repoPath);
+    if (!scope && !diary) {
+      return { content: [{ type: "text", text: `no .scopecreeper.md or .scopecreeper-diary.md found at ${repoPath}. (Bootstrap with: creeper init ${repoPath})` }] };
+    }
+    const lines: string[] = [];
+    if (scope) {
+      lines.push(`# scope doc (.scopecreeper.md)`);
+      lines.push("");
+      lines.push(scope.trim());
+    }
+    if (diary) {
+      if (lines.length) { lines.push(""); lines.push("---"); lines.push(""); }
+      lines.push(`# decision diary (.scopecreeper-diary.md)`);
+      lines.push("");
+      lines.push(diary.trim());
+    }
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+
+  if (name === "scope_creeper_patterns") {
+    const windowDays = typeof (args as { windowDays?: number }).windowDays === "number"
+      ? (args as { windowDays: number }).windowDays
+      : 30;
+    const entries = await readJustifications();
+    const findings = analyzePatterns(entries, windowDays);
+    if (!findings.length) {
+      return { content: [{ type: "text", text: `no behavioral patterns surfaced over the last ${windowDays}d. (Patterns appear after 3+ decisions on the same area or 4+ dismissals.)` }] };
+    }
+    const lines = [`${findings.length} pattern${findings.length === 1 ? "" : "s"} surfaced over the last ${windowDays}d:`, ""];
+    for (const f of findings) {
+      const glyph = f.severity === "high" ? "✗" : f.severity === "warn" ? "▲" : "■";
+      lines.push(`${glyph} ${f.headline}`);
+      for (const ev of f.evidence) lines.push(`   ${ev}`);
+      lines.push(`   → ${f.suggestion}`);
       lines.push("");
     }
     return { content: [{ type: "text", text: lines.join("\n") }] };

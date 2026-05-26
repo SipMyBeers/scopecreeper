@@ -22,5 +22,29 @@
     "@types/react": "^18",
     "ts-node": "^10.9.2",
     "typescript": "^5"
-  }
+  },
+  "files": [
+    "dist",
+    "launchd",
+    "README.md"
+  ],
+  "license": "MIT",
+  "author": "Beers Labs LLC",
+  "homepage": "https://scopecreeper.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SipMyBeers/scopecreeper.git",
+    "directory": "apps/tui"
+  },
+  "keywords": [
+    "scope-creeper",
+    "ai-coding",
+    "drift-detection",
+    "claude-code",
+    "cursor",
+    "git-hooks",
+    "indie-hacker",
+    "tui",
+    "cli"
+  ]
 }
