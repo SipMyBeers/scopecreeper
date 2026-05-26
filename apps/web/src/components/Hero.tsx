@@ -10,8 +10,10 @@ import {
   type CSSProperties,
 } from "react";
 import { parseRepoUrl } from "@/core";
+import { AnimatePresence } from "framer-motion";
 import { PixelArcade } from "./PixelArcade";
 import CorrodingBezel from "./CorrodingBezel";
+import ArcadeCollapsedHeader from "./ArcadeCollapsedHeader";
 import ProjectSidebar from "./ProjectSidebar";
 import DiagnosticReadout from "./DiagnosticReadout";
 import ExportModal from "./ExportModal";
@@ -213,6 +215,8 @@ export default function Hero() {
     return undefined;
   }, [currentThread?.id, state, reset, creep, sessionHook]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const hasResult = state === "done" && Boolean(currentThread?.result);
+
   return (
     <div
       ref={wrapRef}
@@ -221,6 +225,21 @@ export default function Hero() {
       <Suspense fallback={null}>
         <ProActivatedBanner />
       </Suspense>
+
+      <AnimatePresence>
+        {hasResult && currentThread && (
+          <ArcadeCollapsedHeader
+            score={currentThread.result.score}
+            tier={currentThread.result.tier}
+            onNewScan={() => {
+              creep.reset();
+              reset();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {!hasResult && (
       <div
         className="relative"
         style={{
@@ -495,6 +514,7 @@ export default function Hero() {
           ))}
         </div>
       </div>
+      )}
 
       <ProjectSidebar
         threads={history.threads}
