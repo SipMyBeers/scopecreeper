@@ -18,7 +18,10 @@ import {
   SYSTEM_PROMPT,
   creepScalePrompt,
 } from "@/core";
-import { CREEP_COST, debit, getOrCreateSession } from "@/lib/session";
+import { artifactPrompt } from "@/core/prompts";
+import type { ArtifactKind } from "@/core";
+import { charge, getOrCreateSession } from "@/lib/session";
+import { tryParseJSON } from "@/lib/json-tolerant";
 
 export const runtime = "edge";
 
@@ -36,6 +39,16 @@ function getEnv(): Env { return getCfEnv<Env>(); }
 interface CreepBody {
   parentSummary: string;
   dimension: CreepDimension;
+  artifactKind?: ArtifactKind;
+}
+
+interface ArtifactPayload {
+  kind: ArtifactKind;
+  title: string;
+  body: string;
+  mime: string;
+  labels?: string[];
+  embed_markdown?: string;
 }
 
 interface LlmCreepJson {
@@ -46,7 +59,11 @@ interface LlmCreepJson {
   dimensions?: CreepDimension[];
 }
 
-async function callLLM(env: Env, prompt: string): Promise<string | null> {
+async function callLLM(
+  env: Env,
+  prompt: string,
+  opts: { maxTokens?: number } = {}
+): Promise<string | null> {
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: prompt },
@@ -56,7 +73,7 @@ async function callLLM(env: Env, prompt: string): Promise<string | null> {
       const out = (await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
         messages,
         response_format: { type: "json_object" },
-        max_tokens: 768,
+        max_tokens: opts.maxTokens ?? 768,
       })) as { response?: string };
       if (out?.response) return out.response;
     } catch (err) {
@@ -72,6 +89,7 @@ async function callLLM(env: Env, prompt: string): Promise<string | null> {
           model: env.OLLAMA_MODEL ?? "gemma3:12b",
           messages,
           stream: false,
+          options: { num_predict: opts.maxTokens ?? 768 },
         }),
       });
       if (res.ok) {
@@ -92,26 +110,6 @@ async function callLLM(env: Env, prompt: string): Promise<string | null> {
   return null;
 }
 
-function tryParseJSON<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  const trimmed = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "");
-  try {
-    return JSON.parse(trimmed) as T;
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]) as T;
-      } catch {
-        /* */
-      }
-    }
-    return null;
-  }
-}
 
 function tierFromScore(score: number): RatingTier {
   if (score >= 96) return "delusion";
@@ -139,19 +137,6 @@ function fallbackResult(d: CreepDimension): DiagnosticResult {
 export async function POST(request: Request): Promise<Response> {
   const env = getEnv();
   const { sid, setCookie } = await getOrCreateSession(request, env);
-  const debited = await debit(sid, CREEP_COST, env);
-  if (!debited.ok) {
-    const r = NextResponse.json(
-      {
-        error: "OUT_OF_CREDITS",
-        credits: debited.record.credits,
-        message: "Out of credits.",
-      },
-      { status: 402 }
-    );
-    if (setCookie) r.headers.append("Set-Cookie", setCookie);
-    return r;
-  }
 
   let body: CreepBody;
   try {
@@ -164,6 +149,63 @@ export async function POST(request: Request): Promise<Response> {
       { error: "missing parentSummary or dimension" },
       { status: 400 }
     );
+  }
+
+  // Charge — KILL artifacts are free-tier-eligible (viral loop);
+  // SHIPPABLE / ISSUE / BADGE are Pro-only.
+  const charged = await charge(sid, env, { artifactKind: body.artifactKind });
+  if (!charged.ok) {
+    const r = NextResponse.json(
+      {
+        error: charged.reason,
+        tier: charged.record.tier ?? "free",
+        credits: charged.record.credits,
+        message:
+          charged.reason === "PRO_REQUIRED"
+            ? "Artifacts are a Pro feature. Upgrade to keep creeping."
+            : "You're out of free credits. Upgrade to Pro for unlimited.",
+      },
+      { status: 402 }
+    );
+    if (setCookie) r.headers.append("Set-Cookie", setCookie);
+    return r;
+  }
+
+  // Artifact path: produce a terminal artifact instead of more branches.
+  if (body.artifactKind) {
+    const artRaw = await callLLM(
+      env,
+      artifactPrompt({
+        kind: body.artifactKind,
+        parentSummary: body.parentSummary,
+        dimensionLabel: body.dimension.label,
+        dimensionBlurb: body.dimension.blurb,
+      }),
+      { maxTokens: 2000 }
+    );
+    const art = tryParseJSON<ArtifactPayload>(artRaw);
+    if (!art || !art.body || !art.title) {
+      return NextResponse.json(
+        { error: "artifact generation failed", raw: artRaw?.slice(0, 500) ?? null },
+        { status: 502 }
+      );
+    }
+    const artifact: ArtifactPayload = {
+      kind: body.artifactKind,
+      title: String(art.title).slice(0, 120),
+      body: String(art.body).slice(0, 8000),
+      mime: art.mime ?? (body.artifactKind === "BADGE" ? "image/svg+xml" : "text/markdown"),
+      labels: Array.isArray(art.labels)
+        ? art.labels.map((l) => String(l).slice(0, 32)).slice(0, 5)
+        : undefined,
+      embed_markdown: art.embed_markdown ? String(art.embed_markdown).slice(0, 400) : undefined,
+    };
+    const r = NextResponse.json(
+      { artifact, terminal: true },
+      { headers: { "x-credits": String(charged.record.credits) } }
+    );
+    if (setCookie) r.headers.append("Set-Cookie", setCookie);
+    return r;
   }
 
   const llmRaw = await callLLM(
@@ -199,7 +241,7 @@ export async function POST(request: Request): Promise<Response> {
     : fallbackResult(body.dimension);
 
   const r = NextResponse.json(result, {
-    headers: { "x-credits": String(debited.record.credits) },
+    headers: { "x-credits": String(charged.record.credits) },
   });
   if (setCookie) r.headers.append("Set-Cookie", setCookie);
   return r;

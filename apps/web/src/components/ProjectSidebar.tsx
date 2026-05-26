@@ -24,13 +24,34 @@ export default function ProjectSidebar({
   currentThreadId,
   onOpen,
   onDelete,
+  onShare,
+  onUpgrade,
+  isPro,
 }: {
   threads: ScanThread[];
   currentThreadId: string | null;
   onOpen: (id: string | null) => void;
   onDelete: (id: string) => void;
+  onShare?: (id: string) => Promise<void>;
+  onUpgrade?: () => void;
+  isPro?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+
+  async function handleShare(id: string) {
+    if (!isPro) {
+      onUpgrade?.();
+      return;
+    }
+    if (!onShare) return;
+    setSharingId(id);
+    try {
+      await onShare(id);
+    } finally {
+      setSharingId(null);
+    }
+  }
 
   return (
     <div
@@ -163,20 +184,36 @@ export default function ProjectSidebar({
                       <span>{shortAgo(t.createdAt)} ago</span>
                     </div>
                   </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Delete ${deriveTitle(t)}?`)) onDelete(t.id);
-                    }}
-                    className="mt-1 text-[10px] opacity-50 hover:opacity-90"
-                    aria-label="Delete thread"
-                    style={{
-                      fontFamily: "var(--font-vt323), monospace",
-                      fontSize: 11,
-                      color,
-                    }}
-                  >
-                    delete
-                  </button>
+                  <div className="mt-1 flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete ${deriveTitle(t)}?`)) onDelete(t.id);
+                      }}
+                      className="text-[10px] opacity-50 hover:opacity-90"
+                      aria-label="Delete thread"
+                      style={{
+                        fontFamily: "var(--font-vt323), monospace",
+                        fontSize: 11,
+                        color,
+                      }}
+                    >
+                      delete
+                    </button>
+                    <span className="opacity-30 text-[10px]" style={{ color }}>·</span>
+                    <button
+                      onClick={() => handleShare(t.id)}
+                      disabled={sharingId === t.id}
+                      className="text-[10px] opacity-70 hover:opacity-100 disabled:opacity-30 uppercase tracking-widest"
+                      aria-label="Share thread"
+                      style={{
+                        fontFamily: "var(--font-vt323), monospace",
+                        fontSize: 11,
+                        color,
+                      }}
+                    >
+                      {sharingId === t.id ? "sharing…" : isPro ? "share" : "share · pro"}
+                    </button>
+                  </div>
                 </li>
               );
             })}

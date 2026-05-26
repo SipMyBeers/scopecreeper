@@ -26,11 +26,7 @@ import {
   mutationPrompt,
   chatlogIllusionPrompt,
 } from "@/core";
-import {
-  SCAN_COST,
-  debit,
-  getOrCreateSession,
-} from "@/lib/session";
+import { charge, getOrCreateSession } from "@/lib/session";
 
 export const runtime = "edge";
 
@@ -52,6 +48,7 @@ interface EnvBindings {
 }
 
 import { getCfEnv } from "@/lib/cf-env";
+import { tryParseJSON } from "@/lib/json-tolerant";
 function getEnv(): EnvBindings {
   return getCfEnv<EnvBindings>();
 }
@@ -113,27 +110,6 @@ async function callLLM(env: EnvBindings, prompt: string): Promise<string | null>
   return null;
 }
 
-function tryParseJSON<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  const trimmed = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "");
-  try {
-    return JSON.parse(trimmed) as T;
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]) as T;
-      } catch {
-        /* fall through */
-      }
-    }
-    return null;
-  }
-}
-
 /** Static fallback dimensions when the LLM is unavailable. */
 function fallbackDimensions(kind: ScanInput["kind"]): CreepDimension[] {
   if (kind === "repo") {
@@ -163,15 +139,19 @@ interface LlmScoreJson {
 export async function POST(request: Request): Promise<Response> {
   const env = getEnv();
 
-  // Session + quota.
+  // Session + tier check.
   const { sid, setCookie } = await getOrCreateSession(request, env);
-  const debited = await debit(sid, SCAN_COST, env);
-  if (!debited.ok) {
+  const charged = await charge(sid, env);
+  if (!charged.ok) {
     const response = NextResponse.json(
       {
-        error: "OUT_OF_CREDITS",
-        credits: debited.record.credits,
-        message: "Out of scan credits. Buy a pack to keep creeping.",
+        error: charged.reason,
+        tier: charged.record.tier ?? "free",
+        credits: charged.record.credits,
+        message:
+          charged.reason === "PRO_REQUIRED"
+            ? "Artifacts are a Pro feature. Upgrade to keep creeping."
+            : "You've used your free scans for this month. Upgrade to Pro for unlimited.",
       },
       { status: 402 }
     );
@@ -204,7 +184,7 @@ export async function POST(request: Request): Promise<Response> {
       try {
         const response = NextResponse.json(
           JSON.parse(hit) as DiagnosticResult,
-          { headers: { "x-cache": "hit", "x-credits": String(debited.record.credits) } }
+          { headers: { "x-cache": "hit", "x-credits": String(charged.record.credits) } }
         );
         if (setCookie) response.headers.append("Set-Cookie", setCookie);
         return response;
@@ -309,7 +289,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const response = NextResponse.json(result, {
-    headers: { "x-credits": String(debited.record.credits) },
+    headers: { "x-credits": String(charged.record.credits) },
   });
   if (setCookie) response.headers.append("Set-Cookie", setCookie);
   return response;

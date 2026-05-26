@@ -14,6 +14,14 @@ export function getPack(id: string): (typeof PACKS)[number] | null {
   return PACKS.find((p) => p.id === id) ?? null;
 }
 
+/** Subscription/one-shot price catalog for tier-based billing. */
+export const PRICES = {
+  PRO_MONTHLY: { priceCents: 900, label: "SCOPE CREEPER · PRO" },
+  AUDIT_ONCE:  { priceCents: 500, label: "SCOPE CREEPER · DEEP AUDIT" },
+} as const;
+
+export type PriceId = keyof typeof PRICES;
+
 interface StripeCheckoutSession {
   id: string;
   url: string;
@@ -21,6 +29,88 @@ interface StripeCheckoutSession {
 
 /** Stripe API version. Always pin so the integration is stable. */
 const STRIPE_VERSION = "2026-02-25.clover";
+
+/** Create a Pro-subscription checkout session ($9/mo recurring). */
+export async function createProSubscriptionSession(args: {
+  secretKey: string;
+  sid: string;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<StripeCheckoutSession> {
+  const form = new URLSearchParams();
+  form.append("mode", "subscription");
+  form.append("success_url", args.successUrl);
+  form.append("cancel_url", args.cancelUrl);
+  form.append("line_items[0][quantity]", "1");
+  form.append("line_items[0][price_data][currency]", "usd");
+  form.append("line_items[0][price_data][unit_amount]", String(PRICES.PRO_MONTHLY.priceCents));
+  form.append("line_items[0][price_data][recurring][interval]", "month");
+  form.append("line_items[0][price_data][product_data][name]", PRICES.PRO_MONTHLY.label);
+  form.append(
+    "line_items[0][price_data][product_data][description]",
+    "Unlimited scans, leaf artifacts, share links, history sync."
+  );
+  form.append("client_reference_id", args.sid);
+  form.append("metadata[sid]", args.sid);
+  form.append("metadata[price_id]", "PRO_MONTHLY");
+  form.append("subscription_data[metadata][sid]", args.sid);
+
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${args.secretKey}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Stripe-Version": STRIPE_VERSION,
+    },
+    body: form.toString(),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Stripe pro-sub create failed: ${res.status} ${t}`);
+  }
+  return (await res.json()) as StripeCheckoutSession;
+}
+
+/** Create a one-shot $5 deep-audit checkout session. */
+export async function createAuditSession(args: {
+  secretKey: string;
+  sid: string;
+  repo: string;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<StripeCheckoutSession> {
+  const form = new URLSearchParams();
+  form.append("mode", "payment");
+  form.append("success_url", args.successUrl);
+  form.append("cancel_url", args.cancelUrl);
+  form.append("line_items[0][quantity]", "1");
+  form.append("line_items[0][price_data][currency]", "usd");
+  form.append("line_items[0][price_data][unit_amount]", String(PRICES.AUDIT_ONCE.priceCents));
+  form.append("line_items[0][price_data][product_data][name]", PRICES.AUDIT_ONCE.label);
+  form.append(
+    "line_items[0][price_data][product_data][description]",
+    `Agentic deep audit on ${args.repo}.`
+  );
+  form.append("client_reference_id", args.sid);
+  form.append("metadata[sid]", args.sid);
+  form.append("metadata[price_id]", "AUDIT_ONCE");
+  form.append("metadata[repo]", args.repo);
+
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${args.secretKey}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Stripe-Version": STRIPE_VERSION,
+    },
+    body: form.toString(),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Stripe audit create failed: ${res.status} ${t}`);
+  }
+  return (await res.json()) as StripeCheckoutSession;
+}
 
 export async function createCheckoutSession(args: {
   secretKey: string;

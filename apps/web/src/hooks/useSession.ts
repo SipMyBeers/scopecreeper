@@ -6,6 +6,11 @@ export interface SessionState {
   sid: string;
   credits: number;
   lifetimePaid: number;
+  tier?: "free" | "pro";
+  isPro?: boolean;
+  proExpiresAt?: number | null;
+  freeScansRemaining?: number;
+  freeScansPerMonth?: number;
 }
 
 export function useSession() {
@@ -25,12 +30,22 @@ export function useSession() {
     void refresh();
   }, [refresh]);
 
-  /** Optimistic local credit adjustment for snappy UI (server is truth). */
+  /** Optimistic local quota adjustment for snappy UI (server is truth).
+   *  Burns legacy credits first, then decrements free-scan remaining if Pro
+   *  isn't active. Pro = no-op. */
   const adjustCredits = useCallback((delta: number) => {
     setSession((s) => {
       if (!s) return s;
-      const cur = Number.isFinite(s.credits) ? s.credits : 0;
-      return { ...s, credits: Math.max(0, cur + delta) };
+      if (s.isPro) return s;
+      const credits = Number.isFinite(s.credits) ? s.credits : 0;
+      if (credits > 0) {
+        return { ...s, credits: Math.max(0, credits + delta) };
+      }
+      const remaining = s.freeScansRemaining ?? 0;
+      return {
+        ...s,
+        freeScansRemaining: Math.max(0, remaining + delta),
+      };
     });
   }, []);
 

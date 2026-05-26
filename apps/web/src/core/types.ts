@@ -31,6 +31,17 @@ export interface CreepDimension {
   creep?: number;
 }
 
+export type ArtifactKind = "SHIPPABLE" | "KILL" | "ISSUE" | "BADGE";
+
+export interface CreepArtifact {
+  kind: ArtifactKind;
+  title: string;
+  body: string;
+  mime: string;
+  labels?: string[];
+  embed_markdown?: string;
+}
+
 /**
  * A node in the creep tree. The root node is the original DELUSION
  * scan; each child is the LLM's projection of what happens if the user
@@ -47,6 +58,112 @@ export interface CreepNode {
   /** Child node ids (sub-dimensions the user has scaled further). */
   childIds: string[];
   createdAt: number;
+  /** If present, this node is a terminal artifact rather than a branch. */
+  artifact?: CreepArtifact;
+  /** True for artifact terminal nodes — no further branches generated. */
+  terminal?: boolean;
+}
+
+/* ============================================================ *
+ *  Projects — Pro-tier workspaces. A project bundles multiple
+ *  inputs (a repo, one or more chatlogs, one or more docs) into a
+ *  single container that we can run theory-vs-actual analysis on.
+ * ============================================================ */
+
+export type ProjectInputKind = "repo" | "chatlog" | "doc";
+
+export interface ProjectRepoInput {
+  kind: "repo";
+  id: string;
+  addedAt: number;
+  /** owner/name */
+  repo: string;
+  /** Snapshot of repo metadata grabbed at import time (README excerpt, etc). */
+  meta: {
+    description?: string;
+    defaultBranch?: string;
+    readmeExcerpt?: string;
+    packageJsonExcerpt?: string;
+    /** Audit findings folded in for the SHIPPED column. */
+    findingsCount?: number;
+    filesScanned?: number;
+    delusionScore?: number;
+  };
+}
+
+export interface ProjectChatlogInput {
+  kind: "chatlog";
+  id: string;
+  addedAt: number;
+  title: string;
+  text: string; // raw chatlog body (capped at ~80KB)
+  turns: number;
+  wordCount: number;
+}
+
+export interface ProjectDocInput {
+  kind: "doc";
+  id: string;
+  addedAt: number;
+  title: string;
+  /** Original file mime — text/markdown, text/plain, application/pdf. */
+  mime: string;
+  /** Extracted plain text. PDFs are extracted client-side via pdfjs. */
+  text: string;
+  bytes: number;
+}
+
+export type ProjectInput = ProjectRepoInput | ProjectChatlogInput | ProjectDocInput;
+
+/** A single feature/claim extracted from theory inputs (chatlog/doc). */
+export interface ClaimedFeature {
+  id: string;
+  title: string;
+  description: string;
+  /** Which input said this. */
+  source: { inputId: string; kind: "chatlog" | "doc" };
+}
+
+/** A surface that actually exists in the repo. */
+export interface ShippedSurface {
+  id: string;
+  /** Category of evidence — route, module, command, dependency, file. */
+  kind: "route" | "module" | "command" | "dep" | "file";
+  title: string;
+  /** Where it lives. */
+  evidence: { file: string; line?: number };
+}
+
+export interface DriftEntry {
+  id: string;
+  status: "matched" | "claimed-only" | "shipped-only";
+  claim?: ClaimedFeature;
+  shipped?: ShippedSurface;
+  /** One-line explanation of how we paired (or didn't). */
+  rationale: string;
+}
+
+export interface ProjectAnalysis {
+  computedAt: number;
+  claimed: ClaimedFeature[];
+  shipped: ShippedSurface[];
+  delta: DriftEntry[];
+  /** AI-suggested deeper paths — "how it could get creepier". */
+  creepier: CreepDimension[];
+  /** Top-line drift summary number — % of claims matched in repo. */
+  matchedPct: number;
+  /** Bottom-line creep prognosis text. */
+  prognosis: string;
+}
+
+export interface Project {
+  id: string;
+  ownerSid: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  inputs: ProjectInput[];
+  analysis?: ProjectAnalysis;
 }
 
 export type ScanKind = "repo" | "chatlog";

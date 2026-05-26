@@ -16,6 +16,7 @@ import DiagnosticReadout from "./DiagnosticReadout";
 import ExportModal from "./ExportModal";
 import CreditsHud from "./CreditsHud";
 import BuyCreditsModal from "./BuyCreditsModal";
+import ShareSuccessModal from "./ShareSuccessModal";
 import SkillTreeView from "./SkillTreeView";
 import { useScanHistory } from "@/hooks/useScanHistory";
 import { useCreepTree } from "@/hooks/useCreepTree";
@@ -61,6 +62,7 @@ export default function Hero() {
   const [exportOpen, setExportOpen] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState<{ threadId: string; url: string } | null>(null);
 
   // Open the buy modal automatically when a scan hits OUT_OF_CREDITS.
   useEffect(() => {
@@ -138,6 +140,18 @@ export default function Hero() {
     void runScan({ kind, payload: trimmed }).then(() => sessionHook.refresh());
     setInputValue("");
   }, [inputValue, runScan, sessionHook]);
+
+  /** One-click demo: scan a hardcoded payload without touching `inputValue`. */
+  const submitWith = useCallback(
+    (payload: string) => {
+      const trimmed = payload.trim();
+      if (!trimmed) return;
+      const kind = detectKind(trimmed);
+      sessionHook.adjustCredits(-1);
+      void runScan({ kind, payload: trimmed }).then(() => sessionHook.refresh());
+    },
+    [runScan, sessionHook]
+  );
 
   // Auto-expand input to textarea for multi-line / pasted chatlogs.
   const isMultiline = inputValue.includes("\n") || inputValue.length > 80;
@@ -418,6 +432,7 @@ export default function Hero() {
           )}
         </form>
 
+
         {/* Icon hotspots over the terminal's GitHub / WWW / file icons. */}
         {[
           {
@@ -481,9 +496,119 @@ export default function Hero() {
         currentThreadId={history.currentThreadId}
         onOpen={openThread}
         onDelete={history.deleteThread}
+        isPro={Boolean(sessionHook.session?.isPro)}
+        onUpgrade={() => setBuyOpen(true)}
+        onShare={async (id) => {
+          const t = history.threads.find((x) => x.id === id);
+          if (!t) return;
+          try {
+            const res = await fetch("/api/share", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ thread: t }),
+            });
+            if (res.status === 402) {
+              setBuyOpen(true);
+              return;
+            }
+            if (!res.ok) {
+              alert("Share failed.");
+              return;
+            }
+            const { url } = (await res.json()) as { url: string };
+            setShareSuccess({ threadId: id, url });
+          } catch {
+            alert("Share failed.");
+          }
+        }}
       />
 
+      {shareSuccess && (() => {
+        const t = history.threads.find((x) => x.id === shareSuccess.threadId);
+        if (!t) return null;
+        return (
+          <ShareSuccessModal
+            thread={t}
+            shareUrl={shareSuccess.url}
+            onClose={() => setShareSuccess(null)}
+          />
+        );
+      })()}
+
       <CreditsHud onClick={() => setBuyOpen(true)} />
+
+      {/* One-click demo row — sits in the dark letterbox below the arcade,
+          only on a fresh visit. Each card auto-submits a real scan so HN
+          visitors see the tool work in zero clicks of typing. */}
+      {state === "idle" && !currentThread && history.threads.length === 0 && (
+        <div
+          className="absolute z-30 left-0 right-0 bottom-2 md:bottom-4 px-3 flex justify-center pointer-events-none"
+        >
+          <div
+            className="flex gap-2 md:gap-3 pointer-events-auto flex-wrap justify-center"
+            style={{ fontFamily: "var(--font-vt323), monospace" }}
+          >
+            <span
+              className="self-center uppercase tracking-[0.3em] opacity-60 mr-1"
+              style={{
+                fontFamily: "var(--font-press-start-2p), monospace",
+                color: "#39ff14",
+                fontSize: 10,
+                textShadow: "0 0 6px #39ff14",
+              }}
+            >
+              TRY:
+            </span>
+            {[
+              {
+                label: "AUDIT vercel/next.js",
+                hint: "real file-line citations",
+                color: "#5cb8ff",
+                payload: "vercel/next.js",
+              },
+              {
+                label: "SCAN 'hello'",
+                hint: "one-word seed",
+                color: "#ffb000",
+                payload: "hello",
+              },
+              {
+                label: "ROAST a chatlog",
+                hint: "paste GPT plans",
+                color: "#ff007f",
+                payload:
+                  "User: I want to build the next Notion but with AI built in. It should also be a calendar and a CRM and have voice notes.\nAssistant: That's a great idea! Let's start by designing the architecture. We'll need...",
+              },
+            ].map((demo) => (
+              <button
+                key={demo.label}
+                onClick={() => submitWith(demo.payload)}
+                disabled={state !== "idle"}
+                className="px-3 py-2 border uppercase tracking-widest disabled:opacity-40 hover:brightness-110 flex flex-col items-start"
+                style={{
+                  borderColor: demo.color,
+                  color: demo.color,
+                  background: "rgba(0,0,0,0.72)",
+                  fontSize: 12,
+                  textShadow: `0 0 4px ${demo.color}`,
+                  letterSpacing: "0.1em",
+                  minWidth: 180,
+                  backdropFilter: "blur(2px)",
+                }}
+                aria-label={`Demo: ${demo.label}`}
+              >
+                <span style={{ fontSize: 11 }}>▸ {demo.label}</span>
+                <span
+                  className="text-[10px] opacity-60 normal-case tracking-normal mt-0.5"
+                  style={{ letterSpacing: 0 }}
+                >
+                  {demo.hint}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {exportOpen && currentThread && (
         <ExportModal
@@ -510,10 +635,15 @@ export default function Hero() {
           outOfCredits={creep.outOfCredits}
           error={creep.error}
           credits={sessionHook.session?.credits ?? null}
+          isPro={Boolean(sessionHook.session?.isPro)}
           onBuyCredits={() => setBuyOpen(true)}
           onFocus={(id) => creep.focus(id)}
           onDrill={(_parent, dim) => {
             void creep.drillInto(dim);
+            sessionHook.adjustCredits(-1);
+          }}
+          onArtifact={(parent, dim, kind) => {
+            void creep.generateArtifact(parent, dim, kind);
             sessionHook.adjustCredits(-1);
           }}
           onClose={() => setTreeOpen(false)}

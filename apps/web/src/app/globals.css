@@ -19,10 +19,11 @@ html, body {
   padding: 0;
   background: #000;
   color: var(--foreground);
-  overflow: hidden;
   image-rendering: pixelated;
   -webkit-font-smoothing: none;
-  height: 100%;
+  /* No global `overflow: hidden` / `height: 100%` — the homepage's Hero is
+     `fixed inset-0 overflow-hidden` and locks scroll on its own; content
+     pages (/about, /faq, /blog/*, /board) need normal document scrolling. */
 }
 
 /* --- Per-asset animations -------------------------------------------- */

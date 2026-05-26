@@ -91,6 +91,102 @@ export function creepScalePrompt(args: {
   ].join("\n");
 }
 
+import type { ArtifactKind } from "./types";
+
+export function artifactPrompt(args: {
+  kind: ArtifactKind;
+  parentSummary: string;
+  dimensionLabel: string;
+  dimensionBlurb: string;
+}): string {
+  const { kind, parentSummary, dimensionLabel, dimensionBlurb } = args;
+  const seedFrame = [
+    `Parent project state:\n"""\n${parentSummary}\n"""`,
+    "",
+    `The user wants to STOP exploring and CONCRETIZE the "${dimensionLabel}" branch.`,
+    `(${dimensionBlurb})`,
+    "",
+  ].join("\n");
+
+  if (kind === "SHIPPABLE") {
+    return [
+      seedFrame,
+      "Produce a SHIPPABLE_V0 spec — a 1-page PRD they could start building in 30 minutes.",
+      "BAN GENERIC WORDS: never say 'simple', 'easy', 'basic', 'modern', 'AI-powered'. Force every claim to be specific.",
+      "Name a concrete tech stack (e.g. 'Next.js 16 + SQLite'). Name real files (e.g. 'app/api/scan/route.ts').",
+      "30-Minute First Cut MUST contain runnable shell commands a developer can paste.",
+      "If the dimension is vague, INVENT specifics rather than stay abstract.",
+      "",
+      "Return JSON only:",
+      `{
+  "kind": "SHIPPABLE",
+  "title": "<project name, terminal-style ALL CAPS, max 24 chars>",
+  "body": "<markdown body — use these sections in this exact order:\\n## What\\n  one sentence: what V0 is. Name a concrete surface (CLI tool, web app, browser extension, etc).\\n## Why\\n  one sentence: who specifically would use this and what they currently do instead.\\n## V0 Scope\\n  - 3-5 bullets, each naming a specific feature with a number or concrete behavior. No 'simple X'.\\n## Stack\\n  one line: '<framework> + <db/storage> + <deploy target>'. Be specific.\\n## Acceptance Criteria\\n  - 3-4 bullets: testable conditions (e.g. 'POST /api/x with foo returns y in <500ms').\\n## 30-Minute First Cut\\n  - numbered list of 4-6 shell commands or file edits. Each must be paste-runnable.\\n## Risk\\n  one sentence: the single most likely reason this dies in week 2 (not generic — name the specific failure).",
+  "mime": "text/markdown"
+}`,
+      "",
+      "Output JSON only. No prose wrapping. No markdown code fences. No trailing commentary.",
+    ].join("\n");
+  }
+
+  if (kind === "KILL") {
+    return [
+      seedFrame,
+      "Produce a KILL spec — a one-page anti-PRD that argues the user should ABANDON this branch.",
+      "Frame the sunk-cost trap. Be honest about effort already invested vs likely return.",
+      "Specify concrete cutoff signals: 'kill if X happens by Y date'.",
+      "",
+      "Return JSON only:",
+      `{
+  "kind": "KILL",
+  "title": "<terminal-style ALL CAPS — name the thing being killed>",
+  "body": "<markdown body in this order:\\n## What This Is\\n  one sentence describing the branch.\\n## Why Kill\\n  - 3-5 bullets: specific failure modes, market gaps, or technical traps.\\n## Sunk-Cost Inventory\\n  - 2-3 bullets: what the user has likely already spent (time, money, identity).\\n## Cutoff Signals\\n  - 3-4 bullets: concrete 'if X is still true on Y, walk' rules. Date-stamped.\\n## What To Build Instead\\n  one sentence: the cheapest pivot that reuses the work.\\n## Eulogy\\n  one absurd terminal-style sentence to memorialize the dead branch.",
+  "mime": "text/markdown"
+}`,
+      "",
+      "Output JSON only.",
+    ].join("\n");
+  }
+
+  if (kind === "ISSUE") {
+    return [
+      seedFrame,
+      "Produce a GitHub Issue body — ready to paste into a real repo to start the work.",
+      "Strict GitHub-flavored markdown. Include task list with checkboxes.",
+      "",
+      "Return JSON only:",
+      `{
+  "kind": "ISSUE",
+  "title": "<issue title — short, imperative, ≤72 chars>",
+  "labels": ["<3-5 lowercase kebab-case labels>"],
+  "body": "<markdown body:\\n## Goal\\n  one paragraph: what we're building and why.\\n## Scope\\n  - [ ] checkbox tasks (5-8 of them). Each one shippable in <2 hours.\\n## Acceptance\\n  - 2-3 concrete done-conditions.\\n## Out of Scope\\n  - 2 bullets of explicit non-goals.\\n## Notes\\n  one paragraph with implementation hints — file paths if obvious, libraries to consider.",
+  "mime": "text/markdown"
+}`,
+      "",
+      "Output JSON only.",
+    ].join("\n");
+  }
+
+  // BADGE
+  return [
+    seedFrame,
+    "Produce a README BADGE — a one-line embeddable artifact for the user's README.",
+    "Should be terminal-style, identifying the delusion score and tier visually.",
+    "Output an SVG and the markdown snippet to embed it.",
+    "",
+    "Return JSON only:",
+    `{
+  "kind": "BADGE",
+  "title": "<short label, ALL CAPS>",
+  "embed_markdown": "[![Scope Creeper Score](badge-url)](permalink)",
+  "body": "<inline SVG string — 240x40, terminal aesthetic, includes score number + tier word + creeper icon. Use monospace font. Black background, tier-colored accent.>",
+  "mime": "image/svg+xml"
+}`,
+    "",
+    "Output JSON only.",
+  ].join("\n");
+}
+
 export function chatlogIllusionPrompt(chatlog: string): string {
   return [
     "Score the AMBITION (illusion) embedded in this input on a 0-100 scale.",

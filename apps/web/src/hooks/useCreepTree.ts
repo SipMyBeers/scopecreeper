@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  ArtifactKind,
+  CreepArtifact,
   CreepDimension,
   CreepNode,
   DiagnosticResult,
@@ -48,6 +50,7 @@ export interface CreepTreeState {
   error: string | null;
   outOfCredits: boolean;
   drillInto: (dim: CreepDimension) => Promise<void>;
+  generateArtifact: (parentNode: CreepNode, dim: CreepDimension, kind: ArtifactKind) => Promise<void>;
   focus: (nodeId: string | null) => void;
   back: () => void;
   reset: () => void;
@@ -166,6 +169,74 @@ export function useCreepTree(args: {
     [args, tree, focusedNode]
   );
 
+  const generateArtifact = useCallback(
+    async (parentNode: CreepNode, dim: CreepDimension, kind: ArtifactKind) => {
+      if (!args.thread || !tree) return;
+      setLoading(true);
+      setError(null);
+      setOutOfCredits(false);
+      try {
+        const parentSummary = [
+          `Score: ${parentNode.result.score}/100`,
+          `Tier:  ${parentNode.result.tier}`,
+          `Verdict: ${parentNode.result.verdict}`,
+          parentNode.result.analysis,
+          parentNode.dimension
+            ? `(this node scaled "${parentNode.dimension.label}": ${parentNode.dimension.blurb})`
+            : `(root scan; original input: ${args.thread.input.payload.slice(0, 240)})`,
+        ].join("\n");
+
+        const res = await fetch("/api/creep", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parentSummary, dimension: dim, artifactKind: kind }),
+        });
+        if (res.status === 402) {
+          setOutOfCredits(true);
+          throw new Error("OUT_OF_CREDITS");
+        }
+        if (!res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(j.error || `artifact failed: ${res.status}`);
+        }
+        const payload = (await res.json()) as { artifact: CreepArtifact; terminal: boolean };
+        args.onCreditsChange?.();
+
+        const id = newNodeId();
+        // Terminal artifact node — inherits parent's diagnostic surface but
+        // carries the artifact payload and is marked terminal.
+        const node: CreepNode = {
+          id,
+          parentId: parentNode.id,
+          dimension: dim,
+          result: parentNode.result,
+          childIds: [],
+          createdAt: Date.now(),
+          artifact: payload.artifact,
+          terminal: true,
+        };
+        const nextTree: NonNullable<ScanThread["tree"]> = {
+          rootId: tree.rootId,
+          nodes: {
+            ...tree.nodes,
+            [parentNode.id]: {
+              ...parentNode,
+              childIds: [...parentNode.childIds, id],
+            },
+            [id]: node,
+          },
+        };
+        args.onChange({ ...args.thread, tree: nextTree });
+        setFocusedId(id);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [args, tree]
+  );
+
   const focus = useCallback((nodeId: string | null) => {
     setFocusedId(nodeId);
     setError(null);
@@ -192,6 +263,7 @@ export function useCreepTree(args: {
     error,
     outOfCredits,
     drillInto,
+    generateArtifact,
     focus,
     back,
     reset,

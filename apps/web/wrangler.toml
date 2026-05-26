@@ -16,6 +16,22 @@ id = "b1ca6972a2ca49ffbb4e1e633c480372"
 binding = "KV_SCAN_CACHE"
 id = "826ba205383d4279a9602575eba2bd8f"
 
+# Public read-only thread snapshots, served at /t/[slug]. Created in Sprint 5.
+[[kv_namespaces]]
+binding = "KV_SHARED_THREADS"
+id = "361e17b293524105850b36e8203b1969"
+
+# Public hall-of-shame: most-delusional repos surfaced via /board.
+[[kv_namespaces]]
+binding = "KV_LEADERBOARD"
+id = "87c5a50b4da048ea8f285d9053fde27e"
+
+# Pro-tier workspaces — project containers with repo + chatlog + doc inputs
+# and cached theory-vs-actual analysis.
+[[kv_namespaces]]
+binding = "KV_PROJECTS"
+id = "9292d4263a164f0ca29b0d13d20ad854"
+
 # Optional vars (non-secret). Secrets go through `wrangler pages secret put`.
 [vars]
 # OLLAMA_MODEL = "gemma3:12b"
