@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  Suspense,
   type CSSProperties,
 } from "react";
 import { parseRepoUrl } from "@/core";
@@ -18,6 +19,7 @@ import CreditsHud from "./CreditsHud";
 import BuyCreditsModal from "./BuyCreditsModal";
 import ShareSuccessModal from "./ShareSuccessModal";
 import SkillTreeView from "./SkillTreeView";
+import ProActivatedBanner from "./ProActivatedBanner";
 import { useScanHistory } from "@/hooks/useScanHistory";
 import { useCreepTree } from "@/hooks/useCreepTree";
 import { useSession } from "@/hooks/useSession";
@@ -216,6 +218,9 @@ export default function Hero() {
       ref={wrapRef}
       className="fixed inset-0 grid place-items-center overflow-hidden bg-black select-none"
     >
+      <Suspense fallback={null}>
+        <ProActivatedBanner />
+      </Suspense>
       <div
         className="relative"
         style={{
