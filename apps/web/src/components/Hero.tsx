@@ -128,7 +128,7 @@ export default function Hero() {
       pushLog("> INITIATING SCOPE_CREEPER.SYS");
       pushLog("> HANDSHAKING REALITY...");
     }
-    if (state === "done" && currentThread) {
+    if (state === "done" && currentThread?.result) {
       pushLog(`> DELUSION = ${currentThread.result.score} :: ${currentThread.result.tier.toUpperCase()}`);
     }
     if (state === "error" && error) {
@@ -227,8 +227,9 @@ export default function Hero() {
       </Suspense>
 
       <AnimatePresence>
-        {hasResult && currentThread && (
+        {hasResult && currentThread?.result && (
           <ArcadeCollapsedHeader
+            key="collapsed-header"
             score={currentThread.result.score}
             tier={currentThread.result.tier}
             onNewScan={() => {

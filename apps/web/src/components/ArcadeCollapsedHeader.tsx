@@ -25,8 +25,11 @@ export default function ArcadeCollapsedHeader({ score, tier, onNewScan }: Props)
       exit={{ y: -80, opacity: 0 }}
       transition={{ type: "spring", stiffness: 260, damping: 28 }}
       style={{
-        position: "sticky",
+        position: "fixed",
         top: 0,
+        left: 0,
+        right: 0,
+        width: "100%",
         zIndex: 50,
         height: 64,
         background: "rgba(0,0,0,0.92)",
