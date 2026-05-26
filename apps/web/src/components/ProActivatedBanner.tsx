@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useSession } from "@/hooks/useSession";
 
 export default function ProActivatedBanner() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { refresh } = useSession();
   const [visible, setVisible] = useState(false);
@@ -18,9 +19,12 @@ export default function ProActivatedBanner() {
       setVisible(true);
       void refresh();
 
-      // Clean URL params
-      const pathname = window.location.pathname;
-      router.replace(pathname, { scroll: false });
+      // Clean URL params while preserving other query params
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete("purchase");
+      next.delete("product");
+      const qs = next.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
 
       // Auto-dismiss after 6 seconds
       const timer = setTimeout(() => {
