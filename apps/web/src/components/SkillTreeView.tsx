@@ -128,13 +128,18 @@ export default function SkillTreeView({
     nodeId: focusedId ?? layout.nodes.find((n) => n.kind === "filled")?.id ?? "",
   });
 
+  type AuditStatus = "idle" | "loading" | "done" | "error";
+  const [auditStatus, setAuditStatus] = useState<AuditStatus>("idle");
+  const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && auditStatus !== "done") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, auditStatus]);
 
   // viewBox sized to the laid-out nodes + padding for boxes.
   const PAD_Y = NODE_H + 40;
@@ -186,11 +191,6 @@ export default function SkillTreeView({
       : undefined;
 
   const seedPreview = thread.input.payload.replace(/\s+/g, " ").slice(0, 120);
-
-  type AuditStatus = "idle" | "loading" | "done" | "error";
-  const [auditStatus, setAuditStatus] = useState<AuditStatus>("idle");
-  const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
-  const [auditError, setAuditError] = useState<string | null>(null);
 
   const repoSlug = thread.input.kind === "repo"
     ? (() => {
