@@ -11,6 +11,9 @@ import { layoutCreepTree, type LaidOutNode } from "@/lib/treeLayout";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import ArtifactPanel from "./ArtifactPanel";
 import type { ArtifactKind } from "@/core";
+import AuditReportModal from "./AuditReportModal";
+import { runDeepAudit, type AuditReport } from "@/lib/api";
+import { parseRepoUrl } from "@/core";
 
 const TIER_COLOR: Record<RatingTier, string> = {
   corpse: "#888888",
@@ -183,6 +186,33 @@ export default function SkillTreeView({
       : undefined;
 
   const seedPreview = thread.input.payload.replace(/\s+/g, " ").slice(0, 120);
+
+  type AuditStatus = "idle" | "loading" | "done" | "error";
+  const [auditStatus, setAuditStatus] = useState<AuditStatus>("idle");
+  const [auditReport, setAuditReport] = useState<AuditReport | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const repoSlug = thread.input.kind === "repo"
+    ? (() => {
+        const p = parseRepoUrl(thread.input.payload);
+        return p ? `${p.owner}/${p.repo}` : null;
+      })()
+    : null;
+
+  async function handleDeepAudit() {
+    if (!repoSlug || auditStatus === "loading") return;
+    setAuditStatus("loading");
+    setAuditError(null);
+    try {
+      const report = await runDeepAudit(repoSlug);
+      setAuditReport(report);
+      setAuditStatus("done");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "audit failed";
+      setAuditError(msg === "PRO_REQUIRED" ? "PRO REQUIRED" : msg);
+      setAuditStatus("error");
+    }
+  }
 
   return (
     <div
@@ -518,7 +548,7 @@ export default function SkillTreeView({
 
           {/* HUD top */}
           <div
-            className="absolute top-4 left-12 z-20 flex items-center gap-3"
+            className="absolute top-4 left-12 z-20 flex items-center gap-3 flex-wrap"
             style={{
               fontFamily: "var(--font-vt323), monospace",
               color: "#39ff14",
@@ -537,6 +567,44 @@ export default function SkillTreeView({
             <span style={{ opacity: 0.65, fontSize: 14 }}>
               :: {thread.input.kind === "repo" ? "REPO" : "INPUT"}
             </span>
+
+            {repoSlug && (
+              <button
+                onClick={() => { void handleDeepAudit(); }}
+                disabled={!isPro || auditStatus === "loading"}
+                title={
+                  !isPro
+                    ? "Deep audit requires Pro ($9/mo)"
+                    : auditStatus === "loading"
+                    ? "Scanning…"
+                    : `Deep-audit ${repoSlug}`
+                }
+                className="px-2 py-0.5 border uppercase tracking-widest"
+                style={{
+                  borderColor: isPro ? "#5cb8ff" : "#555",
+                  color: isPro ? "#5cb8ff" : "#555",
+                  background: "rgba(0,0,0,0.6)",
+                  fontFamily: "var(--font-vt323), monospace",
+                  fontSize: 13,
+                  textShadow: isPro ? "0 0 6px #5cb8ff" : "none",
+                  cursor: isPro ? "pointer" : "not-allowed",
+                  opacity: isPro ? 1 : 0.5,
+                  letterSpacing: "0.15em",
+                }}
+              >
+                {auditStatus === "loading"
+                  ? "SCANNING…"
+                  : isPro
+                  ? "DEEP AUDIT"
+                  : "DEEP AUDIT [PRO]"}
+              </button>
+            )}
+
+            {auditStatus === "error" && auditError && (
+              <span style={{ color: "#ff007f", fontSize: 13, textShadow: "0 0 4px #ff007f" }}>
+                ! {auditError}
+              </span>
+            )}
           </div>
 
           {/* HUD bottom */}
@@ -704,6 +772,16 @@ export default function SkillTreeView({
           )}
         </aside>
       </div>
+
+      {auditStatus === "done" && auditReport && (
+        <AuditReportModal
+          report={auditReport}
+          onClose={() => {
+            setAuditStatus("idle");
+            setAuditReport(null);
+          }}
+        />
+      )}
     </div>
   );
 }
