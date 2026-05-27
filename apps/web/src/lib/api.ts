@@ -63,3 +63,54 @@ export function loginWithGitHub(returnTo: string = window.location.pathname) {
   const search = new URLSearchParams({ return_to: returnTo });
   window.location.href = `/api/auth/github?${search.toString()}`;
 }
+
+// ── Deep Audit ──────────────────────────────────────────────────────────────
+
+export type FindingCategory =
+  | "TODO_DENSITY"
+  | "DEAD_TEST"
+  | "DEAD_CODE"
+  | "DEP_AGE"
+  | "SECRET"
+  | "MIXED_CONCERNS";
+
+export interface AuditFinding {
+  category: FindingCategory;
+  severity: "info" | "warn" | "high";
+  file: string;
+  line?: number;
+  evidence: string;
+}
+
+export interface AuditReport {
+  repo: string;
+  scannedAt: number;
+  filesScanned: number;
+  bytesScanned: number;
+  findings: AuditFinding[];
+  narrative: string;
+  delusionScore: number;
+  truncated: boolean;
+}
+
+export async function runDeepAudit(repo: string): Promise<AuditReport> {
+  const res = await fetch("/api/audit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo }),
+  });
+  if (res.status === 402) {
+    throw new Error("PRO_REQUIRED");
+  }
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const j = (await res.json()) as { error?: string };
+      detail = j.error ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `audit failed: ${res.status}`);
+  }
+  return (await res.json()) as AuditReport;
+}
