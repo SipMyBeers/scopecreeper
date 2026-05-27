@@ -201,7 +201,7 @@ async function readInbox(drainAfter: boolean): Promise<{ events: InboxEvent[] }>
   return { events };
 }
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 function parseArgs(argv: string[]): {
   apiKey: string | undefined;
@@ -373,6 +373,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "scope_creeper_audit",
+      description:
+        "Run a deep audit on a public GitHub repo — fetches the tarball, walks up to 200 files, applies grep heuristics (secrets, TODO density, dead tests, debug spam, dep age), and returns a scored narrative report with file:line evidence. Delusion score (0-100) + tier + LLM narrative + full findings list. Pro tier required ($9/mo at scopecreeper.ai). Results are recorded on the public /board leaderboard.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          repo: {
+            type: "string",
+            description: "GitHub repo as 'owner/name' or full https://github.com/owner/name URL.",
+          },
+        },
+        required: ["repo"],
+      },
+    },
+    {
       name: "scope_creeper_shippable",
       description:
         "Generate a SHIPPABLE_V0 artifact — a 1-page PRD with a concrete stack, V0 scope (3-5 bullets), acceptance criteria, and 4-6 paste-runnable shell commands for the first 30 minutes of work. Use when a plan has survived the KILL test and you want to start building. Pro tier ($9/mo).",
@@ -532,6 +547,67 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       for (const ev of f.evidence) lines.push(`   ${ev}`);
       lines.push(`   → ${f.suggestion}`);
       lines.push("");
+    }
+    return { content: [{ type: "text", text: lines.join("\n") }] };
+  }
+
+  if (name === "scope_creeper_audit") {
+    const rawRepo = String((args as { repo?: string }).repo ?? "").trim();
+    if (!rawRepo) {
+      return { isError: true, content: [{ type: "text", text: "missing 'repo'" }] };
+    }
+    // Accept full GitHub URLs as well as owner/name shorthand.
+    const repoSlug = (() => {
+      const urlMatch = rawRepo.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/);
+      if (urlMatch) return urlMatch[1].replace(/\.git$/, "");
+      return rawRepo;
+    })();
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoSlug)) {
+      return { isError: true, content: [{ type: "text", text: `invalid repo format — expected 'owner/name', got: ${rawRepo}` }] };
+    }
+    const result = await apiCall("/api/audit", { repo: repoSlug });
+    if (!result.ok) {
+      const hint = result.error.includes("PRO_REQUIRED")
+        ? "\n\n(Deep audit is a Pro feature — upgrade at scopecreeper.ai)"
+        : "";
+      return { isError: true, content: [{ type: "text", text: `${result.error}${hint}` }] };
+    }
+    const r = result.data as {
+      repo: string;
+      scannedAt: number;
+      filesScanned: number;
+      bytesScanned: number;
+      findings: Array<{ category: string; severity: string; file: string; line?: number; evidence: string }>;
+      narrative: string;
+      delusionScore: number;
+      truncated: boolean;
+    };
+    const tier =
+      r.delusionScore >= 96 ? "DELUSION"
+      : r.delusionScore >= 71 ? "ABYSS"
+      : r.delusionScore >= 31 ? "SWEETSPOT"
+      : "CORPSE";
+    const bytesFmt = r.bytesScanned < 1024 ? `${r.bytesScanned} B`
+      : r.bytesScanned < 1024 * 1024 ? `${(r.bytesScanned / 1024).toFixed(1)} KB`
+      : `${(r.bytesScanned / (1024 * 1024)).toFixed(1)} MB`;
+    const sevRank = (s: string) => s === "high" ? 0 : s === "warn" ? 1 : 2;
+    const sorted = [...r.findings].sort((a, b) => sevRank(a.severity) - sevRank(b.severity));
+    const lines: string[] = [
+      `DEEP AUDIT: ${r.repo}`,
+      `Score: ${String(r.delusionScore).padStart(3, "0")}/100 (${tier})`,
+      "",
+      r.narrative || `${r.filesScanned} files scanned, ${r.findings.length} findings.`,
+      "",
+      `Files: ${r.filesScanned} · Findings: ${r.findings.length} · ${bytesFmt}${r.truncated ? " · PARTIAL SCAN" : ""}`,
+    ];
+    if (sorted.length) {
+      lines.push("", "FINDINGS:");
+      for (const f of sorted) {
+        const loc = f.line ? `${f.file}:${f.line}` : f.file;
+        lines.push(`[${f.severity}] ${f.category.padEnd(16)} ${loc.padEnd(40)} — ${f.evidence}`);
+      }
+    } else {
+      lines.push("", "No findings detected.");
     }
     return { content: [{ type: "text", text: lines.join("\n") }] };
   }

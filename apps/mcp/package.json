@@ -1,6 +1,6 @@
 {
   "name": "@scopecreeper/mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Scope Creeper MCP server — exposes scan / kill / shippable tools to Claude Code and any MCP client.",
   "type": "module",
   "bin": {
