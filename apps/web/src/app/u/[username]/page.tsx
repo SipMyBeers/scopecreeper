@@ -301,7 +301,7 @@ export default async function UserProfilePage({
             ◂ SCOPE CREEPER
           </Link>
           <div style={{ ...PIXEL, fontSize: "clamp(20px,4vw,32px)", color: "#ff007f", textShadow: "0 0 10px #ff007f" }}>
-            USER NOT FOUND
+            {errorMsg?.includes("rate limit") ? "RATE LIMITED" : "USER NOT FOUND"}
           </div>
           <p style={{ fontFamily: "var(--font-vt323), monospace", fontSize: 20, opacity: 0.8 }}>
             {errorMsg ?? `GitHub user @${username} not found or unavailable.`}
