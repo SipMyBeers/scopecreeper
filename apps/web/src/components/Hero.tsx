@@ -9,7 +9,8 @@ import {
   Suspense,
   type CSSProperties,
 } from "react";
-import { parseRepoUrl } from "@/core";
+import { parseRepoUrl, parseUserUrl } from "@/core";
+import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
 import { PixelArcade } from "./PixelArcade";
 import CorrodingBezel from "./CorrodingBezel";
@@ -63,6 +64,7 @@ export default function Hero() {
   const history = useScanHistory();
   const { state, error, currentThread, runScan, reset, openThread } = history;
   const sessionHook = useSession();
+  const router = useRouter();
   const [exportOpen, setExportOpen] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
@@ -139,22 +141,33 @@ export default function Hero() {
   const submit = useCallback(() => {
     const trimmed = inputValue.trim();
     if (!trimmed) return;
+    const userParsed = parseUserUrl(trimmed);
+    if (userParsed) {
+      router.push(`/u/${userParsed.username}`);
+      setInputValue("");
+      return;
+    }
     const kind = detectKind(trimmed);
     sessionHook.adjustCredits(-1);
     void runScan({ kind, payload: trimmed }).then(() => sessionHook.refresh());
     setInputValue("");
-  }, [inputValue, runScan, sessionHook]);
+  }, [inputValue, runScan, sessionHook, router]);
 
   /** One-click demo: scan a hardcoded payload without touching `inputValue`. */
   const submitWith = useCallback(
     (payload: string) => {
       const trimmed = payload.trim();
       if (!trimmed) return;
+      const userParsed = parseUserUrl(trimmed);
+      if (userParsed) {
+        router.push(`/u/${userParsed.username}`);
+        return;
+      }
       const kind = detectKind(trimmed);
       sessionHook.adjustCredits(-1);
       void runScan({ kind, payload: trimmed }).then(() => sessionHook.refresh());
     },
-    [runScan, sessionHook]
+    [runScan, sessionHook, router]
   );
 
   // Auto-expand input to textarea for multi-line / pasted chatlogs.
@@ -424,7 +437,7 @@ export default function Hero() {
               }}
               spellCheck={false}
               aria-label="Drop your payload"
-              placeholder="paste chatlog... cmd+enter to scan"
+              placeholder="repo, chatlog, or @github-username"
               className="w-full h-full bg-transparent border border-[#39ff14]/30 outline-none text-[#39ff14] uppercase p-1 resize-none"
               style={{
                 fontFamily: "var(--font-vt323), monospace",
