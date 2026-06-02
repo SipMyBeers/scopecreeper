@@ -3,6 +3,110 @@
  * Uses the global `fetch`; no axios, no SQLite.
  */
 
+export interface UserRepoSummary {
+  name: string;
+  fullName: string;
+  description: string | null;
+  language: string | null;
+  stars: number;
+  forks: number;
+  size: number;
+  pushedAt: string | null;
+  createdAt: string | null;
+  archived: boolean;
+  topics: string[];
+}
+
+/** Top-level GitHub user metadata. */
+export interface GitHubUserMeta {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  publicRepos: number;
+  followers: number;
+  createdAt: string | null;
+}
+
+/**
+ * Parse a GitHub username from:
+ *   @username
+ *   github.com/username        (no second path segment)
+ *   https://github.com/username
+ * Returns null if input looks like an owner/repo or full chatlog.
+ */
+export function parseUserUrl(input: string): { username: string } | null {
+  const trimmed = input.trim();
+  if (/^@[\w-]+$/.test(trimmed)) return { username: trimmed.slice(1) };
+  const urlMatch = trimmed.match(
+    /^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w-]+)\/?$/i
+  );
+  if (urlMatch) return { username: urlMatch[1] };
+  return null;
+}
+
+/** Fetch a GitHub user's public profile + top 30 repos (sorted by pushed_at). */
+export async function fetchUserProfile(
+  username: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<{ user: GitHubUserMeta; repos: UserRepoSummary[] }> {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "scopecreeper-diagnostic",
+  };
+
+  const [userRes, reposRes] = await Promise.all([
+    fetchImpl(`https://api.github.com/users/${username}`, { headers }),
+    fetchImpl(
+      `https://api.github.com/users/${username}/repos?sort=pushed&per_page=30&type=public`,
+      { headers }
+    ),
+  ]);
+
+  if (!userRes.ok) {
+    if (userRes.status === 403) {
+      throw new Error(`GitHub API rate limit hit for ${username} (403)`);
+    }
+    throw new Error(`GitHub user not found: ${username} (${userRes.status})`);
+  }
+
+  const userData = (await userRes.json()) as Record<string, unknown>;
+  let reposData: Record<string, unknown>[] = [];
+  if (reposRes.ok) {
+    reposData = (await reposRes.json()) as Record<string, unknown>[];
+  } else if (reposRes.status !== 404) {
+    throw new Error(`GitHub repos fetch failed for ${username} (${reposRes.status})`);
+  }
+
+  const user: GitHubUserMeta = {
+    login: String(userData.login ?? username),
+    name: (userData.name as string | null) ?? null,
+    avatarUrl: (userData.avatar_url as string | null) ?? null,
+    bio: (userData.bio as string | null) ?? null,
+    publicRepos: Number(userData.public_repos ?? 0),
+    followers: Number(userData.followers ?? 0),
+    createdAt: (userData.created_at as string | null) ?? null,
+  };
+
+  const repos: UserRepoSummary[] = reposData
+    .filter((r) => !r.fork)
+    .map((r) => ({
+      name: String(r.name ?? ""),
+      fullName: String(r.full_name ?? `${username}/${r.name}`),
+      description: (r.description as string | null) ?? null,
+      language: (r.language as string | null) ?? null,
+      stars: Number(r.stargazers_count ?? 0),
+      forks: Number(r.forks_count ?? 0),
+      size: Number(r.size ?? 0),
+      pushedAt: (r.pushed_at as string | null) ?? null,
+      createdAt: (r.created_at as string | null) ?? null,
+      archived: Boolean(r.archived ?? false),
+      topics: Array.isArray(r.topics) ? (r.topics as string[]) : [],
+    }));
+
+  return { user, repos };
+}
+
 export interface RepoStats {
   owner: string;
   repo: string;

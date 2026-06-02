@@ -187,6 +187,68 @@ export function artifactPrompt(args: {
   ].join("\n");
 }
 
+function repoAgeLabel(pushedAt: string | null): string {
+  if (!pushedAt) return "unknown";
+  const days = Math.floor((Date.now() - Date.parse(pushedAt)) / 86_400_000);
+  if (days < 1) return "today";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+export function userProfilePrompt(args: {
+  user: { login: string; name: string | null; bio: string | null; publicRepos: number; followers: number; createdAt: string | null };
+  repos: { name: string; description: string | null; language: string | null; stars: number; size: number; pushedAt: string | null; archived: boolean }[];
+}): string {
+  const accountAgeDays = args.user.createdAt
+    ? Math.floor((Date.now() - Date.parse(args.user.createdAt)) / 86_400_000)
+    : null;
+  const ageLabel = accountAgeDays !== null
+    ? accountAgeDays > 365
+      ? `${Math.floor(accountAgeDays / 365)} years`
+      : `${Math.floor(accountAgeDays / 30)} months`
+    : "unknown";
+
+  const reposToAnalyze = args.repos.slice(0, 15);
+  const repoLines = reposToAnalyze
+    .map((r, i) => {
+      const archived = r.archived ? " [ARCHIVED]" : "";
+      const desc = r.description ? ` — ${r.description.slice(0, 80)}` : "";
+      return `  ${i + 1}. ${r.name} (${r.language ?? "?"})${desc} — ${r.size}KB — ${r.stars}★ — last active ${repoAgeLabel(r.pushedAt)}${archived}`;
+    })
+    .join("\n");
+
+  return [
+    `Analyze this GitHub developer's building patterns. Score their scope creep tendency.`,
+    ``,
+    `Developer: ${args.user.login}${args.user.name ? ` (${args.user.name})` : ""}`,
+    `Account age: ${ageLabel}`,
+    `Bio: ${args.user.bio ?? "(none)"}`,
+    `Total public repos (incl. forks): ${args.user.publicRepos}`,
+    `Followers: ${args.user.followers}`,
+    ``,
+    `Top ${reposToAnalyze.length} repos (most recently active):`,
+    repoLines,
+    ``,
+    `Score 0 = disciplined, focused, consistent shipper.`,
+    `Score 100 = serial project abandoner, scope inflation, never ships.`,
+    ``,
+    `Return JSON only, no markdown:`,
+    `{`,
+    `  "delusionScore": <int 0-100>,`,
+    `  "tier": "corpse"|"sweetspot"|"abyss"|"delusion",`,
+    `  "verdict": "<3-6 WORDS ALL CAPS — describe their building pattern>",`,
+    `  "analysis": "<one terminal-style sentence about what you observe in their repos>",`,
+    `  "patterns": [`,
+    `    "<specific observable pattern 1, e.g. '12 of 30 repos abandoned after first week'>",`,
+    `    "<specific pattern 2, grounded in the repo list>",`,
+    `    "<specific pattern 3>"`,
+    `  ]`,
+    `}`,
+  ].join("\n");
+}
+
 export function chatlogIllusionPrompt(chatlog: string): string {
   return [
     "Score the AMBITION (illusion) embedded in this input on a 0-100 scale.",

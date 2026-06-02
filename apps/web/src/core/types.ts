@@ -166,6 +166,21 @@ export interface Project {
   analysis?: ProjectAnalysis;
 }
 
+export interface UserProfileResult {
+  username: string;
+  name: string | null;
+  avatarUrl: string | null;
+  publicRepos: number;
+  analyzedCount: number;
+  delusionScore: number;
+  tier: RatingTier;
+  verdict: string;
+  analysis: string;
+  patterns: string[];
+  topRepos: import("./github").UserRepoSummary[];
+  scannedAt: number;
+}
+
 export type ScanKind = "repo" | "chatlog";
 
 export interface ScanInput {
