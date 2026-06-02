@@ -40,12 +40,12 @@ function fallbackProfile(
   name: string | null,
   topRepos: UserProfileResult["topRepos"]
 ): UserProfileResult {
-  const abandonRate = analyzedCount > 0
+  const abandonRate = topRepos.length > 0
     ? topRepos.filter((r) => {
         if (!r.pushedAt || !r.createdAt) return false;
         const lifeDays = (Date.parse(r.pushedAt) - Date.parse(r.createdAt)) / 86_400_000;
         return lifeDays < 14;
-      }).length / Math.min(analyzedCount, topRepos.length)
+      }).length / topRepos.length
     : 0;
   const score = Math.min(100, Math.round(abandonRate * 80 + (repoCount > 30 ? 20 : 0)));
   const tier = tierForScore(score);
