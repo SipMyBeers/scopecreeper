@@ -72,3 +72,19 @@ export interface ScanThread {
     nodes: Record<string, CreepNode>;
   };
 }
+
+/** The result of scanning a GitHub developer profile. */
+export interface UserProfileResult {
+  username: string;
+  name: string | null;
+  avatarUrl: string | null;
+  publicRepos: number;
+  analyzedCount: number;
+  delusionScore: number;
+  tier: RatingTier;
+  verdict: string;
+  analysis: string;
+  patterns: string[];
+  topRepos: import("./github.js").UserRepoSummary[];
+  scannedAt: number;
+}
