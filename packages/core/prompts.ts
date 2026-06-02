@@ -91,14 +91,14 @@ export function userProfilePrompt(args: {
   const accountAgeDays = args.user.createdAt
     ? Math.floor((Date.now() - Date.parse(args.user.createdAt)) / 86_400_000)
     : null;
-  const ageLabel = accountAgeDays
+  const ageLabel = accountAgeDays !== null
     ? accountAgeDays > 365
       ? `${Math.floor(accountAgeDays / 365)} years`
       : `${Math.floor(accountAgeDays / 30)} months`
     : "unknown";
 
-  const repoLines = args.repos
-    .slice(0, 15)
+  const reposToAnalyze = args.repos.slice(0, 15);
+  const repoLines = reposToAnalyze
     .map((r, i) => {
       const archived = r.archived ? " [ARCHIVED]" : "";
       const desc = r.description ? ` — ${r.description.slice(0, 80)}` : "";
@@ -112,10 +112,10 @@ export function userProfilePrompt(args: {
     `Developer: ${args.user.login}${args.user.name ? ` (${args.user.name})` : ""}`,
     `Account age: ${ageLabel}`,
     `Bio: ${args.user.bio ?? "(none)"}`,
-    `Total public repos (non-fork): ${args.user.publicRepos}`,
+    `Total public repos (incl. forks): ${args.user.publicRepos}`,
     `Followers: ${args.user.followers}`,
     ``,
-    `Top ${args.repos.slice(0, 15).length} repos (most recently active):`,
+    `Top ${reposToAnalyze.length} repos (most recently active):`,
     repoLines,
     ``,
     `Score 0 = disciplined, focused, consistent shipper.`,

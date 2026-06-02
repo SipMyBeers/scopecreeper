@@ -169,15 +169,19 @@ export async function fetchUserProfile(
   ]);
 
   if (!userRes.ok) {
-    throw new Error(
-      `GitHub user not found: ${username} (${userRes.status})`
-    );
+    if (userRes.status === 403) {
+      throw new Error(`GitHub API rate limit hit for ${username} (403)`);
+    }
+    throw new Error(`GitHub user not found: ${username} (${userRes.status})`);
   }
 
   const userData = (await userRes.json()) as Record<string, unknown>;
-  const reposData = reposRes.ok
-    ? ((await reposRes.json()) as Record<string, unknown>[])
-    : [];
+  let reposData: Record<string, unknown>[] = [];
+  if (reposRes.ok) {
+    reposData = (await reposRes.json()) as Record<string, unknown>[];
+  } else if (reposRes.status !== 404) {
+    throw new Error(`GitHub repos fetch failed for ${username} (${reposRes.status})`);
+  }
 
   const user: GitHubUserMeta = {
     login: String(userData.login ?? username),
