@@ -28,7 +28,16 @@ Scope Creeper is a small native daemon (8.6 MB RAM, written in Rust) plus an Ink
 
 ## Quick start (3 minutes)
 
-The daemon and the TUI are one binary. Here's the full loop:
+**Option A — npm global (fastest):**
+
+```bash
+npm install -g @scopecreeper/tui
+creeper init ~/your-repo       # writes .scopecreeper.md
+creeper install-hook ~/your-repo  # drift check on every commit
+creeper daemon                 # 8.6 MB watcher, macOS notifications
+```
+
+**Option B — clone and build (for contributors or Rust daemon):**
 
 ```bash
 # 1. Clone and build
@@ -38,7 +47,7 @@ pnpm install
 pnpm --filter @scopecreeper/tui build
 pnpm --filter @scopecreeper/tui exec npm link
 
-# 2. Build the native daemon (recommended, optional — TUI falls back to Node if not present)
+# 2. Build the native daemon (optional — TUI falls back to Node if not present)
 cd apps/daemon-rs
 cargo build --release
 cp target/release/creeperd /opt/homebrew/bin/    # or anywhere on PATH
@@ -47,15 +56,13 @@ cd ../..
 # 3. Initialize a scope doc in any repo you want watched
 creeper init ~/path/to/your-repo
 
-# 4. Open the generated .scopecreeper.md and fill in the
-#    "What this project is NOT" and "Explicitly deferred" sections.
-#    Auto-generated bullets are based on README + last 30 commits.
+# 4. Fill in "What this project is NOT" and "Explicitly deferred" sections
 $EDITOR ~/path/to/your-repo/.scopecreeper.md
 
 # 5. Install the pre-commit drift check on that repo
 creeper install-hook ~/path/to/your-repo
 
-# 6. Start the background watcher (8.6 MB RSS, fires macOS notifications on drift)
+# 6. Start the background watcher
 creeper daemon
 ```
 
@@ -111,7 +118,20 @@ The MCP server is published on npm so any MCP-aware client can install it direct
 claude mcp add scope-creeper -- npx -y @scopecreeper/mcp
 ```
 
-This gives Claude three tools it can call mid-session: `scope_creeper_scan`, `scope_creeper_kill`, and `scope_creeper_shippable`. Sycophantic AI plus adversarial scope check produces better plans than either alone.
+This gives Claude eight tools it can call mid-session:
+
+| Tool | What it does | Tier |
+| --- | --- | --- |
+| `scope_creeper_scan` | Score any repo URL or chatlog against declared scope | Free |
+| `scope_creeper_kill` | Generate a brutal one-page autopsy arguing why NOT to build a plan | Free |
+| `scope_creeper_inbox` | Read pending drift events from the local daemon's inbox | Free |
+| `scope_creeper_history` | Query past drift decisions by repo, area, or date window | Free |
+| `scope_creeper_scope` | Read `.scopecreeper.md` + diary from the local filesystem | Free |
+| `scope_creeper_patterns` | Surface behavioral patterns — what you keep expanding, avoiding, or drifting into | Free |
+| `scope_creeper_audit` | Deep code audit — grep heuristics + LLM narrative, with file:line evidence | Pro |
+| `scope_creeper_shippable` | Generate a SHIPPABLE_V0 PRD with stack, 3-5 scope bullets, and paste-runnable setup commands | Pro |
+
+Sycophantic AI plus adversarial scope check produces better plans than either alone.
 
 ## Configuration
 

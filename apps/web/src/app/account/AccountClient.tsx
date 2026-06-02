@@ -79,6 +79,18 @@ export default function AccountClient() {
     await refresh();
   }
 
+  async function upgradeToPro() {
+    const res = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ product: "PRO" }),
+    });
+    const j = (await res.json()) as { url?: string; error?: string };
+    if (j.url) window.location.href = j.url;
+    else setError(j.error ?? "checkout failed");
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="text-sm opacity-80">
@@ -91,6 +103,33 @@ export default function AccountClient() {
           ? "unlimited scans, all artifacts, audits, projects"
           : `${session?.freeScansRemaining ?? "?"} / ${session?.freeScansPerMonth ?? "?"} free scans this month`}
       </div>
+
+      {/* Pro upgrade banner for free users */}
+      {!session?.isPro && (
+        <div
+          className="border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ borderColor: "rgba(255,176,0,0.5)", background: "rgba(255,176,0,0.05)" }}
+        >
+          <div className="flex flex-col gap-1">
+            <div
+              className="uppercase tracking-widest"
+              style={{ fontFamily: "var(--font-press-start-2p), monospace", fontSize: 11, color: "#ffb000", textShadow: "0 0 6px #ffb000" }}
+            >
+              ▸ UPGRADE TO PRO · $9/MO
+            </div>
+            <div className="text-[13px] opacity-75">
+              Unlocks deep audit, shippable artifacts, unlimited scans, private repo support
+            </div>
+          </div>
+          <button
+            onClick={upgradeToPro}
+            className="px-4 py-2 border uppercase tracking-widest shrink-0"
+            style={{ borderColor: "#ffb000", color: "#ffb000", background: "rgba(0,0,0,0.6)", fontSize: 12, textShadow: "0 0 4px #ffb000" }}
+          >
+            UPGRADE NOW →
+          </button>
+        </div>
+      )}
 
       {/* Create new */}
       <div

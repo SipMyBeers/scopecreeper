@@ -388,6 +388,80 @@ export default function BecomeLanding() {
             <CTAButton href="/scan" label="try the arcade" color={CYAN} />
           </div>
 
+          {/* passive demo */}
+          <SectionTag color={CYAN}>What you see in 3 seconds</SectionTag>
+          <P>
+            Paste a chatlog or a repo URL. Scope Creeper reads what you built
+            vs what you said you&apos;d build, scores it 0–100, and hands you the
+            exit routes ranked by how much each creeps your scope.
+          </P>
+          <Terminal accent={CYAN} title="creeper · arcade · input">
+            <TokLine tokens={[{ c: DIM, t: "paste a chatlog, repo URL, or single idea →" }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[
+              { c: CYAN, t: "> " },
+              { c: WHITE, t: "I asked Claude to add a forgot-password flow to the login page." },
+            ]} />
+            <TokLine tokens={[
+              { c: DIM, t: "  " },
+              { c: WHITE, t: "Two hours later: admin dashboard, role tables, audit logs." },
+            ]} />
+            <TokLine tokens={[
+              { c: DIM, t: "  " },
+              { c: WHITE, t: "The original login page is still broken." },
+            ]} />
+          </Terminal>
+          <Terminal accent={PINK} title="creeper · scan result">
+            <TokLine tokens={[
+              { c: DIM, t: "scanning chatlog · 847 tokens · " },
+              { c: GREEN, t: "done in 1.4s" },
+            ]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[
+              { c: DIM, t: "DELUSION SCORE  " },
+              { c: PINK, t: "071 / 100", bold: true },
+              { c: DIM, t: "  ·  " },
+              { c: PINK, t: "ABYSS", bold: true },
+            ]} />
+            <TokLine tokens={[{ c: DIM, t: "─────────────────────────────────────────────────" }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[{ c: WHITE, t: "Asked for:   " }, { c: GREEN, t: '"add forgot-password to the login page"' }]} />
+            <TokLine tokens={[{ c: WHITE, t: "Drifted to:  " }, { c: PINK, t: "admin dashboard · role tables · audit log" }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[{ c: AMBER, t: "  You asked for one thing. You're building a platform.", bold: true }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[{ c: DIM, t: "  PATHS FROM HERE" }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[
+              { c: PINK, t: "  ▸ KILL IT   " },
+              { c: GREEN, t: "▓░░░░░░░░░" },
+              { c: DIM, t: "  creep " },
+              { c: GREEN, t: "12/100", bold: true },
+              { c: DIM, t: "   " },
+              { c: AMBER, t: "★ fastest exit", bold: true },
+            ]} />
+            <TokLine tokens={[{ c: DIM, t: "       delete admin + roles, ship just forgot-password today" }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[
+              { c: DIM, t: "    REDIRECT  " },
+              { c: CYAN, t: "▓▓▓░░░░░░░" },
+              { c: DIM, t: "  creep " },
+              { c: CYAN, t: "28/100" },
+            ]} />
+            <TokLine tokens={[{ c: DIM, t: "       paste the STOP DRIFTING prompt into Claude, reset context" }]} />
+            <TokLine tokens={[" "]} />
+            <TokLine tokens={[
+              { c: DIM, t: "    LEGITIMIZE" },
+              { c: AMBER, t: "▓▓▓▓▓▓▓░░░" },
+              { c: DIM, t: "  creep " },
+              { c: AMBER, t: "71/100" },
+            ]} />
+            <TokLine tokens={[{ c: DIM, t: "       add admin to .scopecreeper.md · keeps the work, sets new scope" }]} />
+          </Terminal>
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <CTAButton href="/scan" label="▸ SCAN YOUR NEXT SESSION" color={CYAN} intense />
+          </div>
+
           {/* the problem */}
           <SectionTag color={AMBER}>The problem AI created</SectionTag>
           <P>

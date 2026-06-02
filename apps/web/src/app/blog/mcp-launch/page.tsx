@@ -132,9 +132,10 @@ export default function McpLaunchPage() {
 
         <P>
           <Code>@scopecreeper/mcp</Code> is now on npm. It&apos;s a Model Context
-          Protocol server that exposes three Scope Creeper tools — <Code>scan</Code>,{" "}
-          <Code>kill</Code>, <Code>shippable</Code> — to Claude Code (or any
-          MCP-speaking client).
+          Protocol server that exposes eight Scope Creeper tools to Claude Code
+          (or any MCP-speaking client): <Code>scan</Code>, <Code>kill</Code>,{" "}
+          <Code>inbox</Code>, <Code>history</Code>, <Code>scope</Code>,{" "}
+          <Code>patterns</Code>, <Code>audit</Code>, and <Code>shippable</Code>.
         </P>
 
         <P>
@@ -161,7 +162,7 @@ export default function McpLaunchPage() {
   --api-key=sk_sc_live_YOUR_KEY`}
         </Pre>
 
-        <H2>Three tools</H2>
+        <H2>Eight tools</H2>
         <P>
           <Code>scope_creeper_scan(payload)</Code> — quick delusion score
           (0-100) + tier + verdict + 3-5 creep dimensions. Free tier.
@@ -171,6 +172,33 @@ export default function McpLaunchPage() {
           sunk-cost framing, dated cutoff signals, &quot;what to build
           instead&quot;, and a one-line eulogy. Free tier. This is the one
           that matters.
+        </P>
+        <P>
+          <Code>scope_creeper_inbox(drain?)</Code> — reads pending drift
+          events from the local daemon&apos;s inbox. Pass{" "}
+          <Code>drain: true</Code> to mark them read. Free tier.
+        </P>
+        <P>
+          <Code>scope_creeper_history(repo?, area?, sinceDays?)</Code> —
+          query your past drift decisions. Useful for &quot;have I rejected
+          this before?&quot; Free tier.
+        </P>
+        <P>
+          <Code>scope_creeper_scope(repoPath)</Code> — reads{" "}
+          <Code>.scopecreeper.md</Code> + the decision diary so Claude can
+          ground recommendations in what you&apos;ve already declared.
+          Free tier.
+        </P>
+        <P>
+          <Code>scope_creeper_patterns(windowDays?)</Code> — surfaces
+          behavioral patterns: what you keep expanding, what you keep
+          avoiding, which repos are chronically in ABYSS. Free tier.
+        </P>
+        <P>
+          <Code>scope_creeper_audit(repo)</Code> — deep code audit on a
+          public GitHub repo: grep heuristics (secrets, TODO density, dead
+          tests, dep age) + LLM narrative with file:line evidence. Pro tier
+          ($9/mo).
         </P>
         <P>
           <Code>scope_creeper_shippable(plan)</Code> — 1-page PRD with a
@@ -211,10 +239,12 @@ export default function McpLaunchPage() {
 
         <H2>Try it free, no key</H2>
         <P>
-          The free tier — <Code>scan</Code> + <Code>kill</Code> — works
-          without authentication, subject to a per-IP rate limit. The Pro
-          tier ($9/mo) gives unlimited everything plus <Code>shippable</Code>{" "}
-          and the rest of the web app (share links, deep-audit, projects).
+          Six tools work without authentication (subject to a per-IP rate
+          limit): <Code>scan</Code>, <Code>kill</Code>, <Code>inbox</Code>,{" "}
+          <Code>history</Code>, <Code>scope</Code>, and <Code>patterns</Code>.
+          The Pro tier ($9/mo) unlocks <Code>audit</Code> and{" "}
+          <Code>shippable</Code>, plus the web app (share links, projects,
+          leaderboard).
         </P>
 
         <H2>Sources</H2>

@@ -94,7 +94,7 @@ claude mcp add scope-creeper -- npx -y @scopecreeper/mcp \\
 #   "use scope-creeper to kill or shippable this plan: ..."`}
           </pre>
           <p className="text-[11px] opacity-60 mt-2 uppercase tracking-widest">
-            v0.1 exposes: scan · kill · shippable
+            v0.3.0 · 8 tools: scan · kill · inbox · history · scope · patterns · audit(pro) · shippable(pro)
           </p>
         </section>
       </article>
